@@ -13,6 +13,23 @@ enum AstNode {
 }
 
 impl AstNode {
+    fn print_flat(&self, tree: &SlotMap<DefaultKey, AstNode>) -> String {
+        match self {
+            AstNode::Definition(s, ss, t) => format!(
+                "λ {s}{} ({})",
+                ss.len(),
+                tree.get(*t).unwrap().print_flat(tree),
+            ),
+            AstNode::Application(t1, t2) => format!(
+                "({}{})",
+                tree.get(*t1).unwrap().print_flat(tree),
+                tree.get(*t2).unwrap().print_flat(tree),
+            ),
+            AstNode::Symbol(s) => format!("{s}")
+        }
+    }
+
+    #[allow(dead_code)]
     fn print(&self, tree: &SlotMap<DefaultKey, AstNode>, indt: usize) -> String {
         let indent = " ".repeat(4*indt);
         match self {
@@ -98,7 +115,7 @@ impl Ast {
     }
 
     fn print(&self) {
-        println!("{}", self.tree.get(self.head).unwrap().print(&self.tree, 0));
+        println!("{}", self.tree.get(self.head).unwrap().print_flat(&self.tree));
     }
 }
 
