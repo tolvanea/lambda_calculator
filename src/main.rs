@@ -15,9 +15,8 @@ enum AstNode {
 impl AstNode {
     fn print_flat(&self, tree: &SlotMap<DefaultKey, AstNode>) -> String {
         match self {
-            AstNode::Definition(s, ss, t) => format!(
-                "λ {s}{} ({})",
-                ss.len(),
+            AstNode::Definition(s, _, t) => format!(
+                "λ {s} ({})",
                 tree.get(*t).unwrap().print_flat(tree),
             ),
             AstNode::Application(t1, t2) => format!(
@@ -117,12 +116,29 @@ impl Ast {
     fn print(&self) {
         println!("{}", self.tree.get(self.head).unwrap().print_flat(&self.tree));
     }
+
+    fn beta_reduce(&mut self, node: DefaultKey, argument: Option<(DefaultKey, DefaultKey)>) {
+        let t = &mut self.tree;
+        match t.get(node).unwrap().clone() {
+            AstNode::Definition(_, symbols, n) =>
+                match argument {
+                    None => self.beta_reduce(n, None),
+                    Some((arg, parent)) => {
+                        for reference in symbols {
+                            *t.get_mut(reference).unwrap() = t.get(arg).unwrap().clone();
+                        }
+                        *t.get_mut(parent).unwrap() = t.remove(n).unwrap();
+                        t.remove(arg).unwrap();
+                        t.remove(node).unwrap();
+                    }
+                }
+            AstNode::Application(t1, t2) => self.beta_reduce(t1, Some((t2, node))),
+            AstNode::Symbol(_) => (),
+        }
+    }
 }
 
 
-// fn beta_reduce(
-//     tree: &mut SlotMap<DefaultKey, AstNode>,
-// )
 
 
 fn main() {
@@ -132,7 +148,19 @@ fn main() {
     let and_nf = format!("λx.(λy.((x y) {false_fn}))");
     //let input = format!("(λ x . ( λ y . ( x y ) ) (λ z . ( z )))");
     let input = format!("(({and_nf} {true_fn}) {false_fn})");
+
+    let mut ast = Ast::new(&input);
+    println!("");
+    println!("");
+    println!("");
     println!("{input}");
-    let ast = Ast::new(&input);
+    ast.print();
+    ast.beta_reduce(ast.head, None);
+    ast.print();
+    ast.beta_reduce(ast.head, None);
+    ast.print();
+    ast.beta_reduce(ast.head, None);
+    ast.print();
+    ast.beta_reduce(ast.head, None);
     ast.print();
 }
