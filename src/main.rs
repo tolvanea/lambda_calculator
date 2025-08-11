@@ -13,16 +13,20 @@ enum AstNode {
 }
 
 impl AstNode {
-    fn print_flat(&self, tree: &SlotMap<DefaultKey, AstNode>) -> String {
+    #[allow(dead_code)]
+    fn print_flat(&self, tree: &SlotMap<DefaultKey, AstNode>, appl: bool) -> String {
         match self {
-            AstNode::Definition(s, _, t) => format!(
-                "λ {s} ({})",
-                tree.get(*t).unwrap().print_flat(tree),
-            ),
+            AstNode::Definition(s, _, t) => {
+                let def = format!(
+                    "λ{s}.{}",
+                    tree.get(*t).unwrap().print_flat(tree, false),
+                );
+                if appl {def} else {format!("({})", def)}
+            }
             AstNode::Application(t1, t2) => format!(
-                "({}{})",
-                tree.get(*t1).unwrap().print_flat(tree),
-                tree.get(*t2).unwrap().print_flat(tree),
+                "({} {})",
+                tree.get(*t1).unwrap().print_flat(tree, true),
+                tree.get(*t2).unwrap().print_flat(tree, true),
             ),
             AstNode::Symbol(s) => format!("{s}")
         }
@@ -114,7 +118,7 @@ impl Ast {
     }
 
     fn print(&self) {
-        println!("{}", self.tree.get(self.head).unwrap().print_flat(&self.tree));
+        println!("{}", self.tree.get(self.head).unwrap().print_flat(&self.tree, true));
     }
 
     fn beta_reduce(&mut self, node: DefaultKey, argument: Option<(DefaultKey, DefaultKey)>) {
