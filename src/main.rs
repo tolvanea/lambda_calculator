@@ -11,60 +11,57 @@ enum AstNode {
     Application(DefaultKey, DefaultKey),
     Symbol(CompactString),
 }
+use AstNode::{Definition, Application, Symbol};
 
 impl AstNode {
-    #[allow(dead_code)]
-    fn print_flat(&self, tree: &SlotMap<DefaultKey, AstNode>, appl: bool) -> String {
+    fn fast_clone(&self) -> AstNode {
         match self {
-            AstNode::Definition(s, _, t) => {
-                let def = format!(
-                    "λ{s}.{}",
-                    tree.get(*t).unwrap().print_flat(tree, false),
-                );
-                if appl {def} else {format!("({})", def)}
-            }
-            AstNode::Application(t1, t2) => format!(
-                "({} {})",
-                tree.get(*t1).unwrap().print_flat(tree, true),
-                tree.get(*t2).unwrap().print_flat(tree, true),
-            ),
-            AstNode::Symbol(s) => format!("{s}")
-        }
-    }
-
-    #[allow(dead_code)]
-    fn print(&self, tree: &SlotMap<DefaultKey, AstNode>, indt: usize) -> String {
-        let indent = " ".repeat(4*indt);
-        match self {
-            AstNode::Definition(s, ss, t) => format!(
-                "{indent}λ {s} [{}] (\n{}{indent})\n",
-                ss.len(),
-                tree.get(*t).unwrap().print(tree, indt + 1),
-            ),
-            AstNode::Application(t1, t2) => format!(
-                "{indent}(\n{}{}{indent})\n",
-                tree.get(*t1).unwrap().print(tree, indt + 1),
-                tree.get(*t2).unwrap().print(tree, indt + 1),
-            ),
-            AstNode::Symbol(s) => format!("{indent}{s}\n")
+            Definition(symbol, _, t) => Definition(symbol.clone(), Vec::new(), *t),
+            Application(t1, t2) => Application(*t1, *t2),
+            Symbol(symbol) => Symbol(symbol.clone()),
         }
     }
 }
 
-#[derive(Clone)]
+// TODO get rid of local arena
+
+
 struct Ast {
     head: DefaultKey,
-    tree: SlotMap<DefaultKey, AstNode>,
+    t: SlotMap<DefaultKey, AstNode>,  // tree
 }
 
 impl Ast {
     fn new(source_code: &str) -> Ast {
         let re = Regex::new(r"([()])|(λ\s?[^()λ\s\.]+)\s?\.|([^()λ\s\.]+)").unwrap();
         let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
-        let mut ast = Ast {head: DefaultKey::null(), tree: SlotMap::new()};
+        let mut ast = Ast {head: DefaultKey::null(), t: SlotMap::new()};
         let mut symbols = HashMap::<CompactString, Vec<Vec<DefaultKey>>>::new();
         ast.head = ast.parse(&mut tokens, &mut symbols, 0);
         ast
+    }
+
+    fn print(&self) {
+        println!("{}", self.print_flat(self.head, true));
+    }
+
+    #[allow(dead_code)]
+    fn print_flat(&self, node:DefaultKey, appl: bool) -> String {
+        match self.t.get(node).unwrap() {
+            Definition(s, _, t) => {
+                let def = format!(
+                    "λ{s}.{}",
+                    self.print_flat(*t, false),
+                );
+                if appl {def} else {format!("({})", def)}
+            }
+            Application(t1, t2) => format!(
+                "({} {})",
+                self.print_flat(*t1, true),
+                self.print_flat(*t2, true),
+            ),
+            Symbol(s) => format!("{s}")
+        }
     }
 
     fn parse<'a>(
@@ -79,14 +76,12 @@ impl Ast {
         match token.chars().next().unwrap() {
             'λ' => {
                 let symbol: CompactString = token[2..].trim_start().into();
-                symbols.entry(symbol.clone())
-                    .and_modify(|vec| vec.push(Vec::new()))
-                    .or_insert(vec![Vec::new()]);
+                symbols.entry(symbol.clone()).or_insert(Vec::new()).push(Vec::new());
                 let sub_ast = self.parse(tokens, symbols, indt+1);
                 let references = symbols.get_mut(&symbol).unwrap().pop().unwrap(); // Scope visibility
-                let ast = AstNode::Definition(symbol, references, sub_ast);
+                let ast = Definition(symbol, references, sub_ast);
                 println!("{}processed {}", " ".repeat(4*indt), token);
-                self.tree.insert(ast)
+                self.t.insert(ast)
             }
             '(' => {
                 let ast1 = self.parse(tokens, symbols, indt+1);
@@ -95,9 +90,9 @@ impl Ast {
                         ast1 // Only one expression: no need to wrap it
                     }
                     _ => {
-                        let ast2 = AstNode::Application(ast1, self.parse(tokens, symbols, indt+1));
+                        let ast2 = Application(ast1, self.parse(tokens, symbols, indt+1));
                         println!("{}processed )", " ".repeat(4*indt));
-                        self.tree.insert(ast2)
+                        self.t.insert(ast2)
                     }
                 };
                 assert_eq!(tokens.next(), Some(")"));
@@ -107,37 +102,73 @@ impl Ast {
             _ => {
                 println!("{}was leaf )", " ".repeat(4*indt));
                 let symbol: CompactString = token.into();
-                let node = self.tree.insert(AstNode::Symbol(symbol.clone()));
-                match symbols.get_mut(&symbol) {
-                    Some(vec) => vec.last_mut().unwrap().push(node),
-                    None => panic!("Unknown symbol '{symbol}'"),
-                }
+                let node = self.t.insert(Symbol(symbol.clone()));
+                symbols.get_mut(&symbol)
+                    .unwrap_or_else(|| panic!("Unknown symbol '{symbol}'"))
+                    .last_mut().unwrap().push(node);
                 node
             }
         }
     }
 
-    fn print(&self) {
-        println!("{}", self.tree.get(self.head).unwrap().print_flat(&self.tree, true));
-    }
-
-    fn beta_reduce(&mut self, node: DefaultKey, argument: Option<(DefaultKey, DefaultKey)>) {
-        let t = &mut self.tree;
-        match t.get(node).unwrap().clone() {
-            AstNode::Definition(_, symbols, n) =>
+    fn beta_reduce(&mut self, node: DefaultKey, argument: Option<(DefaultKey, DefaultKey)>) -> bool {
+        match self.t.get(node).unwrap().clone() {
+            Definition(s, symbols, n) => {
                 match argument {
                     None => self.beta_reduce(n, None),
                     Some((arg, parent)) => {
-                        for reference in symbols {
-                            *t.get_mut(reference).unwrap() = t.get(arg).unwrap().clone();
-                        }
-                        *t.get_mut(parent).unwrap() = t.remove(n).unwrap();
-                        t.remove(arg).unwrap();
-                        t.remove(node).unwrap();
+                        println!("D{s} {} : {}", self.print_flat(n, true), self.print_flat(arg, true));
+                        for (i, reference) in symbols.iter().enumerate() {
+                            println!("???");
+                            let arg_copied = if i < symbols.len() - 1 {
+                                let cloned = self.deep_clone(arg, &mut HashMap::new());
+                                self.t.remove(cloned).unwrap() // useless allocation and deallocation :/
+                            } else {
+                                self.t.remove(arg).unwrap()
+                            };
+                            *self.t.get_mut(*reference).unwrap() = arg_copied;
+                        } // TODO last item is unnecessary copy
+                        *self.t.get_mut(parent).unwrap() = self.t.remove(n).unwrap();
+                        self.t.remove(node).unwrap();
+                        true
                     }
                 }
-            AstNode::Application(t1, t2) => self.beta_reduce(t1, Some((t2, node))),
-            AstNode::Symbol(_) => (),
+            }
+            Application(t1, t2) => {
+                println!("A ({} : {})", self.print_flat(t1, true), self.print_flat(t2, true));
+                self.beta_reduce(t1, Some((t2, node))) || self.beta_reduce(t2, None)
+            },
+            Symbol(s) => {
+                println!("S{s}");
+                false
+            },
+        }
+    }
+
+    fn deep_clone(
+        &mut self,
+        key: DefaultKey,
+        symbols: &mut HashMap<CompactString, Vec<Vec<DefaultKey>>>,
+    ) -> DefaultKey {
+        match self.t.get(key).unwrap().fast_clone() {
+            Definition(symbol, _, t) => {
+                println!("D{symbol}");
+                symbols.entry(symbol.clone()).or_insert(Vec::new()).push(Vec::new());
+                let cloned_node = self.deep_clone(t, symbols);
+                let references = symbols.get_mut(&symbol).unwrap().pop().unwrap(); // Scope visibility
+                self.t.insert(Definition(symbol.clone(), references, cloned_node))
+            }
+            Application(t1, t2) => {
+                println!("A");
+                let a = Application(self.deep_clone(t1, symbols), self.deep_clone(t2, symbols));
+                self.t.insert(a)
+            }
+            Symbol(symbol) => {
+                println!("S{symbol}");
+                let cloned = self.t.insert(Symbol(symbol.clone()));
+                symbols.get_mut(&symbol).map(|n| n.last_mut().unwrap().push(cloned));
+                cloned
+            }
         }
     }
 }
@@ -150,8 +181,16 @@ fn main() {
     let true_fn = "λa.(λb.a)";
     let false_fn = "λa.(λb.b)";
     let and_nf = format!("λx.(λy.((x y) {false_fn}))");
+
+    let one = "λa.a";
+    let two = "λb.(b b)";
+    let three = "λc.(c (c c))";
+    let succ = "λn1.(λd.(d (n1 d)))";
+    let times = format!("λn2.(λm.((m {succ}) n2))");
     //let input = format!("(λ x . ( λ y . ( x y ) ) (λ z . ( z )))");
-    let input = format!("(({and_nf} {true_fn}) {false_fn})");
+    //let input = format!("(({and_nf} {true_fn}) {false_fn})");
+    let input = format!("({succ} {two})");
+    //let input = format!("(({times} {two}) {one})");
 
     let mut ast = Ast::new(&input);
     println!("");
@@ -167,4 +206,15 @@ fn main() {
     ast.print();
     ast.beta_reduce(ast.head, None);
     ast.print();
+    ast.beta_reduce(ast.head, None);
+    ast.print();
+    ast.beta_reduce(ast.head, None);
+    ast.print();
+    ast.beta_reduce(ast.head, None);
+    ast.print();
+    ast.beta_reduce(ast.head, None);
+    ast.print();
+    ast.beta_reduce(ast.head, None);
+    ast.print();
+
 }
