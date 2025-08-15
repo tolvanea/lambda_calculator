@@ -27,13 +27,20 @@ struct Ast {
     t: SlotMap<DefaultKey, AstNode>,  // tree
 }
 
+#[derive(PartialEq)]
+enum Currying {
+    Def,
+    Appl,
+    Stop,
+}
+
 impl Ast {
     fn new(source_code: &str) -> Ast {
-        let re = Regex::new(r"([()])|(λ\s?[^()λ\s\.]+)\s?\.|([^()λ\s\.]+)").unwrap();
+        let re = Regex::new(r"([()λ\.])|([^()λ\.\s]+)").unwrap();
         let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
         let mut ast = Ast {t: SlotMap::new(), hat: null()};
         let mut symbols = HashMap::<CompactString, Vec<(DefaultKey, Vec<DefaultKey>)>>::new();
-        let head = ast.parse(&mut tokens, &mut symbols, 0);
+        let head = ast.parse(&mut tokens, &mut symbols, Currying::Stop, 0);
         ast.hat = ast.t.insert(Definition("hidden".into(), Vec::new(), head));
         ast
     }
@@ -182,43 +189,52 @@ impl Ast {
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = &'a str>>,
         symbols: &mut Symbols,
+        parsing: Currying,
         indt: usize,
     ) -> DefaultKey {
-        let token = tokens.next().expect("Ran out of tokens");
+        let token = tokens.next().expect("Closing parenthesis missing");
+        let next_char = token.chars().next().unwrap();
 
-        match token.chars().next().unwrap() {
-            'λ' => {
-                let symbol: CompactString = token[2..].trim_start().into();
-                println!("{}λ{symbol}", " ".repeat(4*indt));
+        if next_char == 'λ' || parsing == Currying::Def {
+            let symbol: CompactString = if next_char == 'λ' {
+                tokens.next().unwrap().trim_start().into()
+            } else {
+                token.into()
+            };
+            let continue_on = if tokens.peek().unwrap().chars().next().unwrap() == '.' {
+                tokens.next().unwrap();
+                Currying::Stop
+            } else {
+                Currying::Def
+            };
 
-                let alloc = self.t.insert(Definition(symbol.clone(), Vec::new(), null()));
-                symbols.entry(symbol.clone()).or_insert(Vec::new()).push((alloc, Vec::new()));
-                let child = self.parse(tokens, symbols, indt+1);
-                self.collect_symbols(alloc, child, &symbol, symbols)
-            }
-            '(' => {
-                println!("{}(", " ".repeat(4*indt));
-                let left = self.parse(tokens, symbols, indt+1);
-                let ast = match *tokens.peek().unwrap() {
-                    ")" => {
-                        println!("{})", " ".repeat(4*indt));
-                        left// Only one expression: no need to wrap it
-                    }
-                    _ => {
-                        let right = self.parse(tokens, symbols, indt+1);
-                        println!("{})", " ".repeat(4*indt));
-                        self.t.insert(Application(left, right))
-                    }
-                };
-                assert_eq!(tokens.next(), Some(")"));
-                ast
-            }
-            ')' => panic!("Syntax error ')' right before:\n{}", tokens.collect::<String>()),
-            _ => {
-                let symbol: CompactString = token.into();
-                println!("{}{symbol}", " ".repeat(4*indt));
-                self.create_leaf(&symbol, symbols, None)
-            }
+            println!("{}λ{symbol}", " ".repeat(4*indt));
+            let alloc = self.t.insert(Definition(symbol.clone(), Vec::new(), null()));
+            symbols.entry(symbol.clone()).or_insert(Vec::new()).push((alloc, Vec::new()));
+            let child = self.parse(tokens, symbols, continue_on, indt+1);
+            self.collect_symbols(alloc, child, &symbol, symbols)
+        } else if next_char == '(' {
+            println!("{}(", " ".repeat(4*indt));
+            let left = self.parse(tokens, symbols, Currying::Stop, indt+1);
+            let ast = match *tokens.peek().unwrap() {
+                ")" => {
+                    println!("{})", " ".repeat(4*indt));
+                    left// Only one expression: no need to wrap it
+                }
+                _ => {
+                    let right = self.parse(tokens, symbols, Currying::Stop, indt+1);
+                    println!("{})", " ".repeat(4*indt));
+                    self.t.insert(Application(left, right))
+                }
+            };
+            assert_eq!(tokens.next(), Some(")"));
+            ast
+        } else if next_char == '(' {
+            panic!("Syntax error '(' right before:\n{}", tokens.collect::<String>())
+        } else {
+            let symbol: CompactString = token.into();
+            println!("{}{symbol}", " ".repeat(4*indt));
+            self.create_leaf(&symbol, symbols, None)
         }
     }
 
@@ -348,7 +364,9 @@ fn main() {
     //let input = format!("(({plus} {two}) {three})");
     //let input = format!("(({times} {two}) {three})");
     //let input = format!("(({exp} {two}) {three})");
-    let input = format!("({frac} {three})");
+    //let input = format!("({frac} {three})");
+
+    let input = "λ n m f x . ((n f)((m f) x))";
 
     let mut ast = Ast::new(&input);
     ast.compute(true)
