@@ -3,7 +3,7 @@ use regex::Regex;
 use compact_str::CompactString;
 use std::iter::Peekable;
 use slotmap::Key;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use AstNode::{Definition, Application, Symbol};
 
 type Symbols = HashMap<CompactString, Vec<(DefaultKey, Vec<DefaultKey>)>>;
@@ -29,10 +29,10 @@ struct Ast {
 
 impl Ast {
     fn new(source_code: &str, print: bool) -> Ast {
-        let re = Regex::new(r"([()λ\.])|([^()λ\.\s]+)").unwrap();
+        let re = Regex::new(r"([()λ\.])|([^()λ\.\s\r\n]+)").unwrap();
         let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
         let mut ast = Ast {t: SlotMap::new(), hat: null()};
-        let mut symbols = HashMap::<CompactString, Vec<(DefaultKey, Vec<DefaultKey>)>>::new();
+        let mut symbols = Symbols::new();
         let head = ast.parse(&mut tokens, &mut symbols, false, print as usize);
         ast.hat = ast.t.insert(Definition("hidden".into(), Vec::new(), head));
         ast
@@ -46,7 +46,8 @@ impl Ast {
     }
 
     fn print(&self) {
-        println!("{}", self.print_flat(self.head()));
+        let mut symbols = Symbols::new();
+        println!("{}", self.print_flat(self.head(), &mut symbols));
     }
 
     fn compute(&mut self, print: bool) {
@@ -59,17 +60,6 @@ impl Ast {
                 break
             }
         }
-        // let mut prev = String::new();
-        // for i in 0..1000 {
-        //     self.beta_reduce(self.head(), self.hat, None);
-        //     print!("{:<5}", i);
-        //     self.print();
-        //     let s = self.print_flat(self.head());
-        //     if s == prev {
-        //         break
-        //     }
-        //     prev = s;
-        // }
     }
 
     // fn debug(&self, node: DefaultKey) {
@@ -103,24 +93,31 @@ impl Ast {
     // }
 
     #[allow(dead_code)]
-    fn print_flat(&self, node: DefaultKey) -> String {
+    fn print_flat(&self, node: DefaultKey, symbols: &mut Symbols) -> String {
         match self.t.get(node).unwrap() {
-            Definition(s, symbols, t) => {
+            Definition(s, ss, t) => {
                 // Invariant: all references are valid
-                for sn in symbols{
+                for sn in ss{
                     match self.t.get(*sn).unwrap() {
                         Symbol(_s, br) => assert!(self.t.get(*br).is_some()),
                         _ => panic!(),
                     }
                 }
-                format!("λ{s}.{}", self.print_flat(*t))
+                let shadows = symbols.entry(s.clone()).or_insert(Vec::new());
+                shadows.push((node, Vec::new()));
+                let duplicates = shadows.len() - 1;
+                let rest = self.print_flat(*t, symbols);
+                symbols.get_mut(s).unwrap().pop();
+                format!("λ{s}{}.{}", "'".repeat(duplicates), rest)
             }
             Application(t1, t2) => format!(
                 "({} {})",
-                self.print_flat(*t1),
-                self.print_flat(*t2),
+                self.print_flat(*t1, symbols),
+                self.print_flat(*t2, symbols),
             ),
-            Symbol(s, _) => format!("{s}")
+            Symbol(s, _) => {
+                format!("{s}{}", "'".repeat(symbols.get(s).unwrap().len() - 1))
+            }
         }
     }
 
@@ -316,11 +313,9 @@ impl Ast {
                 let (t1, t2) = (*t1, *t2);
                 let child1 = self.deep_clone(t1, symbols);
                 let child2 = self.deep_clone(t2, symbols);
-                // prntln!("Clone: lppA");
                 self.t.insert(Application(child1, child2))
             }
             Symbol(symbol, back_ref) => {
-                //println!("Clone: S{symbol} {:?}", self.t.get(back_ref).is_some());
                 self.create_leaf(&symbol.clone(), symbols, Some(*back_ref))
             }
         }
@@ -334,7 +329,6 @@ fn main() {
     let true_fn = "λa b.a";
     let false_fn = "λa b.b";
     let and_fn = format!("λx y.((x y) {false_fn})");
-    let input = format!("(({and_fn} {true_fn}) {false_fn})");
 
     let zero = "λ z x.x";
     let one = "λ a x.(a x)";
@@ -355,6 +349,7 @@ fn main() {
     let frac = format!{"(({u} {u}) {frac_f})"};
 
     let inputs = [
+        ("astrophe", format!("(λ x y. (y x) λ y. y)")),
         ("false", format!("({and_fn} {true_fn} {false_fn})")),
         ("true", format!("({and_fn} {true_fn} {true_fn})")),
         ("true", format!("({if_0} {zero})")),
@@ -365,13 +360,13 @@ fn main() {
         ("9", format!("(({exp} {two}) {three})")),
         ("6", format!("({frac} {three})")),
     ];
+    //for (name, input) in [("muu", format!("({times} {two} {two})"))] {
     for (name, input) in inputs {
         let mut ast = Ast::new(&input, false);
         println!("{input}");
-        println!("{}", ast.print_flat(ast.head()));
+        ast.print();
         ast.compute(false);
         ast.print();
         println!("{name}");
-
     }
 }
