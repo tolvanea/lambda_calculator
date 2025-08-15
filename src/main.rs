@@ -29,11 +29,11 @@ struct Ast {
 
 impl Ast {
     fn new(source_code: &str, print: bool) -> Ast {
-        let re = Regex::new(r"([()λ\.])|([^()λ\.\s\r\n])").unwrap();
+        let re = Regex::new(r"([()])|(λ\s*[^()λ\.]+)\.|([^()λ\.\s\r\n]+)").unwrap();
         let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
         let mut ast = Ast {t: SlotMap::new(), hat: null()};
         let mut symbols = Symbols::new();
-        let head = ast.parse(&mut tokens, &mut symbols, false, print as usize);
+        let head = ast.parse(&mut tokens, &mut symbols, print as usize);
         ast.hat = ast.t.insert(Definition("^".into(), Vec::new(), head));
         ast
     }
@@ -179,7 +179,6 @@ impl Ast {
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = &'a str>>,
         symbols: &mut Symbols,
-        parsing_parameter: bool,
         indt: usize,
     ) -> DefaultKey {
         let token = tokens.next().expect("Closing parenthesis missing");
@@ -187,31 +186,32 @@ impl Ast {
 
         let indt1 = if indt == 0 { 0 } else { indt+1 };
 
-        if next_char == 'λ' || parsing_parameter {
-            let symbol: CompactString = if next_char == 'λ' {
-                tokens.next().unwrap().trim_start().into()
-            } else {
-                token.into()
-            };
-            let continue_on = if tokens.peek().unwrap().chars().next().unwrap() == '.' {
-                tokens.next().unwrap();
-                false
-            } else {
-                true
-            };
+        if next_char == 'λ' {
+            let params = token[2..].trim().chars().filter(|c| !c.is_whitespace());
 
-            if indt > 0 { println!("{}λ{symbol}", " ".repeat(4*indt)); }
-            let alloc = self.t.insert(Definition(symbol.clone(), Vec::new(), null()));
-            symbols.entry(symbol.clone()).or_insert(Vec::new()).push((alloc, Vec::new()));
-            let child = self.parse(tokens, symbols, continue_on, indt1);
-            self.collect_symbols(alloc, child, &symbol, symbols)
+            let mut applications = Vec::new();
+            for s in params {
+                let mut symbol = CompactString::new(""); symbol.push(s); // Rust sucks,
+                if indt > 0 { println!("{}λ{symbol}", " ".repeat(4*indt)); }
+                let alloc = self.t.insert(Definition(symbol.clone(), Vec::new(), null()));
+                symbols.entry(symbol.clone()).or_insert(Vec::new()).push((alloc, Vec::new()));
+                applications.push((symbol, alloc));
+            }
+
+            let mut child = self.parse(tokens, symbols, indt1);
+
+            for (symbol, alloc) in applications.iter().rev() {
+                self.collect_symbols(*alloc, child, &symbol, symbols);
+                child = *alloc;
+            }
+            child
         } else if next_char == '(' {
             if indt > 0 { println!("{}(", " ".repeat(4*indt)); }
-            let mut left = self.parse(tokens, symbols, false, indt1);
+            let mut left = self.parse(tokens, symbols, indt1);
             let mut arguments = Vec::new();
 
             while *tokens.peek().expect("Missing parenthesis ')'") != ")" {
-                arguments.push(self.parse(tokens, symbols, false, indt1));
+                arguments.push(self.parse(tokens, symbols, indt1));
             }
             let ast = if arguments.is_empty() {
                 left// Only one expression: no need to wrap it
@@ -342,13 +342,13 @@ fn main() {
     let exp = "λnm.(n m)";
 
     let succ = "λndx.(d (n d x))";
-    let pred = "λ n f x.(n λ g h.(h (g f)) (λu.x) (λu.u))";
+    let pred = "λnfx.(n λgh.(h (g f)) (λu.x) (λu.u))";
 
     let u = "λxy.(y (x x y))"; // Y combinator
     let if_0 = format!{"λn.((n λa.{false_fn}) {true_fn})"};
 
     let frac_f = format!{"λfn.({if_0} n {one} ({times} n (f ({pred} n))))"};
-    let frac = format!{"(({u} {u}) {frac_f})"};
+    let frac = format!{"({u} {u} {frac_f})"};
 
     let inputs = [
         ("false", format!("({and_fn} {true_fn} {false_fn})")),
@@ -362,11 +362,11 @@ fn main() {
         ("6", format!("({frac} {three})")),
         ("astrophe", format!("(λ x y. (y x) λ y. y)")),
     ];
-    //for (name, input) in [("muu", format!("(λnfx.(n λgh.(h (g f)) (λu.x) (λu.u)) λbx.(b (b x)))"))] {
+    //for (name, input) in [("muu", format!("λbx.(b (b x))"))] {
     for (name, input) in inputs {
-        let mut ast = Ast::new(&input, false);
         println!("{name}");
         println!("{input}");
+        let mut ast = Ast::new(&input, false);
         ast.print();
         ast.compute(false);
         ast.print();
