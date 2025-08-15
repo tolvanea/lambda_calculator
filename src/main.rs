@@ -4,12 +4,7 @@ use compact_str::CompactString;
 use std::iter::Peekable;
 use slotmap::Key;
 use std::collections::HashMap;
-use std::sync::LazyLock;
 use AstNode::{Definition, Application, Symbol};
-
-static BLANK: LazyLock<AstNode> = LazyLock::new(||
-    Application(DefaultKey::null(), DefaultKey::null())
-);
 
 type Symbols = HashMap<CompactString, Vec<(DefaultKey, Vec<DefaultKey>)>>;
 
@@ -27,20 +22,6 @@ enum AstNode {
     Symbol(CompactString, DefaultKey),
 }
 
-
-impl AstNode {
-    fn fast_clone(&self) -> AstNode {
-        match self {
-            Definition(symbol, _, t) => Definition(symbol.clone(), Vec::new(), *t),
-            Application(t1, t2) => Application(*t1, *t2),
-            Symbol(symbol, p) => Symbol(symbol.clone(), *p),
-        }
-    }
-}
-
-// TODO get rid of local arena
-
-
 struct Ast {
     hat: DefaultKey, // Invisible dummy node above the head
     t: SlotMap<DefaultKey, AstNode>,  // tree
@@ -50,8 +31,7 @@ impl Ast {
     fn new(source_code: &str) -> Ast {
         let re = Regex::new(r"([()])|(λ\s?[^()λ\s\.]+)\s?\.|([^()λ\s\.]+)").unwrap();
         let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
-        let mut ast = Ast {t: SlotMap::new(), hat: DefaultKey::null()
-        };
+        let mut ast = Ast {t: SlotMap::new(), hat: null()};
         let mut symbols = HashMap::<CompactString, Vec<(DefaultKey, Vec<DefaultKey>)>>::new();
         let head = ast.parse(&mut tokens, &mut symbols, 0);
         ast.hat = ast.t.insert(Definition("hidden".into(), Vec::new(), head));
@@ -65,61 +45,75 @@ impl Ast {
         }
     }
 
-    fn debug(&self, node: DefaultKey) {
-        use std::io::prelude::*;
-        match self.t.get(node).unwrap() {
-            Definition(s, symbols, t) => {
-                print!("λ{s}[{}].(", symbols.len());
-                std::io::stdout().flush().unwrap();
-                for sn in symbols{
-                    // print!("--{s}--");
-                    std::io::stdout().flush().unwrap();
-                    match self.t.get(*sn).unwrap().fast_clone() {
-                        Symbol(_s, br) => {
-                            assert!(self.t.get(br).is_some())
-                        }
-                        _ => panic!(),
-                    }
-                }
-                self.debug(*t);
-                print!(")");
-                std::io::stdout().flush().unwrap();
-            }
-            Application(t1, t2) => {
-                print!("(");
-                self.debug(*t1);
-                std::io::stdout().flush().unwrap();
-                print!(" ");
-                self.debug(*t2);
-                print!(")");
-                std::io::stdout().flush().unwrap();
-            }
-            Symbol(s, _) => print!("{s}")
-        }
+    fn print(&self) {
+        println!("{}", self.print_flat(self.head()));
     }
 
-    fn print(&self) {
-        println!("AST: {}", self.print_flat(self.head()));
+    fn compute(&mut self, print: bool) {
+        for i in 0..1000000 {
+            if print {
+                print!("{:<5}", i);
+                self.print();
+            }
+            if !self.beta_reduce(self.head(), self.hat, None) {
+                break
+            }
+        }
+        // let mut prev = String::new();
+        // for i in 0..1000 {
+        //     self.beta_reduce(self.head(), self.hat, None);
+        //     print!("{:<5}", i);
+        //     self.print();
+        //     let s = self.print_flat(self.head());
+        //     if s == prev {
+        //         break
+        //     }
+        //     prev = s;
+        // }
     }
+
+    // fn debug(&self, node: DefaultKey) {
+    //     use std::io::prelude::*;
+    //     match self.t.get(node).unwrap() {
+    //         Definition(s, symbols, t) => {
+    //             print!("λ{s}[{}].(", symbols.len());
+    //             std::io::stdout().flush().unwrap();
+    //             for sn in symbols{
+    //                 std::io::stdout().flush().unwrap();
+    //                 match self.t.get(*sn).unwrap().fast_clone() {
+    //                     Symbol(_s, br) => assert!(self.t.get(br).is_some()),
+    //                     _ => panic!(),
+    //                 }
+    //             }
+    //             self.debug(*t);
+    //             print!(")");
+    //             std::io::stdout().flush().unwrap();
+    //         }
+    //         Application(t1, t2) => {
+    //             print!("(");
+    //             self.debug(*t1);
+    //             std::io::stdout().flush().unwrap();
+    //             print!(" ");
+    //             self.debug(*t2);
+    //             print!(")");
+    //             std::io::stdout().flush().unwrap();
+    //         }
+    //         Symbol(s, _) => print!("{s}")
+    //     }
+    // }
 
     #[allow(dead_code)]
     fn print_flat(&self, node: DefaultKey) -> String {
         match self.t.get(node).unwrap() {
             Definition(s, symbols, t) => {
+                // Invariant: all references are valid
                 for sn in symbols{
-                    match self.t.get(*sn).unwrap().fast_clone() {
-                        Symbol(_s, br) => {
-                            assert!(self.t.get(br).is_some())
-                        }
+                    match self.t.get(*sn).unwrap() {
+                        Symbol(_s, br) => assert!(self.t.get(*br).is_some()),
                         _ => panic!(),
                     }
                 }
-                let def = format!(
-                    "λ{s}.{}",
-                    self.print_flat(*t),
-                );
-                //if appl {def} else {format!("({})", def)}
-                def
+                format!("λ{s}.{}", self.print_flat(*t))
             }
             Application(t1, t2) => format!(
                 "({} {})",
@@ -130,6 +124,30 @@ impl Ast {
         }
     }
 
+    // Works together with create_leaf
+    fn collect_symbols(
+        &mut self,
+        alloc: DefaultKey,
+        child: DefaultKey,
+        symbol: &CompactString,
+        symbols: &mut Symbols,
+    ) -> DefaultKey {
+        let ss = symbols.get_mut(symbol).unwrap();
+        let (_, references) = ss.pop().unwrap();
+        if ss.is_empty() {
+            symbols.remove(symbol);
+        }
+        match self.t.get_mut(alloc).unwrap() {
+            Definition(_, refs, c) => {
+                *refs = references;
+                *c = child
+            },
+            _ => panic!(),
+        };
+        alloc
+    }
+
+    // Works together with collect_symbols
     fn create_leaf(
         &mut self,
         symbol: &CompactString,
@@ -138,16 +156,15 @@ impl Ast {
     ) -> DefaultKey {
         let alloc = self.t.insert(Symbol(symbol.clone(), null()));
         let (def_node, def_symbols) = match symbols.get_mut(symbol) {
-            Some(s) => {
-                // Rust sucks
+            Some(s) => { // Symbol is found from local tree (parse / deep_clone)
                 let (a, b) = s.last_mut().unwrap();
                 (*a, b)
             },
-            None => match back_ref {
+            None => match back_ref { // Symbol is found from an outside context (deep_clone)
                 Some(back_ref) => {
                     match self.t.get_mut(back_ref).unwrap() {
                         Definition(_, ss, _) => (back_ref, ss),
-                        _ => panic!("Illegal operation"),
+                        _ => panic!(),
                     }
                 }
                 None => panic!("Unknown symbol '{symbol}'")
@@ -174,18 +191,10 @@ impl Ast {
                 let symbol: CompactString = token[2..].trim_start().into();
                 println!("{}λ{symbol}", " ".repeat(4*indt));
 
-                // TODO functions for this
-                let alloc = self.t.insert(BLANK.clone());
+                let alloc = self.t.insert(Definition(symbol.clone(), Vec::new(), null()));
                 symbols.entry(symbol.clone()).or_insert(Vec::new()).push((alloc, Vec::new()));
-                let sub_ast = self.parse(tokens, symbols, indt+1);
-                let ss = symbols.get_mut(&symbol).unwrap();
-                let (_, references) = ss.pop().unwrap();
-                if ss.is_empty() {
-                    symbols.remove(&symbol);
-                }
-
-                *self.t.get_mut(alloc).unwrap() = Definition(symbol, references, sub_ast);
-                alloc
+                let child = self.parse(tokens, symbols, indt+1);
+                self.collect_symbols(alloc, child, &symbol, symbols)
             }
             '(' => {
                 println!("{}(", " ".repeat(4*indt));
@@ -219,29 +228,18 @@ impl Ast {
         parent: DefaultKey,
         argument: Option<(DefaultKey, DefaultKey)>,
     ) -> bool {
-        // self.debug(self.head());
         match self.t.get(node).unwrap().clone() {
-            Definition(s, symbols, n) => {
+            Definition(_, symbols, n) => {
                 match argument {
                     None => {
-                        //println!("D huti");
                         self.beta_reduce(n, node, None)
                     }
                     Some((arg, grand_parent)) => {
-                        //print!("D{s} {}", self.print_flat(n));
-                        //println!(" : {}", self.print_flat(arg));
                         for (i, reference) in symbols.iter().enumerate() {
-                            // println!("1");
-                            // self.debug(self.head());
                             let (arg_copied, arg_addr) = if i < symbols.len() - 1 {
                                 let cloned = self.deep_clone(arg, &mut HashMap::new());
-                                // println!("2.a");
-                                // self.debug(self.head());
-                                // useless allocation and deallocation :/
-                                (self.t.remove(cloned).unwrap(), cloned)
+                                (self.t.remove(cloned).unwrap(), cloned) // alloc + dealloc :/
                             } else {
-                                // println!("2.b");
-                                // self.debug(self.head());
                                 (self.t.remove(arg).unwrap(), arg)
                             };
 
@@ -275,55 +273,34 @@ impl Ast {
                             }
                             _ => panic!(),
                         }
-                        // println!("3");
-                        // self.debug(self.head());
                         self.t.remove(node).unwrap();
-                        // println!("4");
-                        // self.debug(self.head());
                         self.t.remove(parent).unwrap();
-                        // println!("5");
-                        // self.debug(self.head());
                         true
                     }
                 }
             }
             Application(t1, t2) => {
-                // println!("A ({} : {})", self.print_flat(t1), self.print_flat(t2));
                 let parn = Some((t2, parent));
-                // Leftmost outermost reduction yields beta-normal form is such exists
+                // Leftmost outermost reduction is guaranteed to yield beta-normal form, if exists
                 self.beta_reduce(t1, node, parn) || self.beta_reduce(t2, node, None)
             },
             Symbol(_s, _back_ref) => {
-                // println!("S {_s} {:?}", self.t.get(_back_ref).is_some());
                 false
             },
         }
     }
 
     fn deep_clone(&mut self, key: DefaultKey, symbols: &mut Symbols) -> DefaultKey {
-        match self.t.get(key).unwrap().fast_clone() {
+        match self.t.get(key).unwrap() {
             Definition(symbol, _, t) => {
-                // println!("Clone: D{symbol}");
+                let (symbol, t) = (symbol.clone(), *t); // Rust iz funy laguane
                 let alloc = self.t.insert(Definition(symbol.clone(), Vec::new(), null()));
-
-                // TODO this hashmap name resolution could be put into a function
                 symbols.entry(symbol.clone()).or_insert(Vec::new()).push((alloc, Vec::new()));
                 let child = self.deep_clone(t, symbols);
-                //let (_, references) = symbols.get_mut(&symbol).unwrap().pop().unwrap();
-                let ss = symbols.get_mut(&symbol).unwrap();
-                let (_, references) = ss.pop().unwrap();
-                if ss.is_empty() {
-                    symbols.remove(&symbol);
-                }
-
-                match self.t.get_mut(alloc).unwrap() {
-                    Definition(_, refs, c) => {*refs = references; *c = child},
-                    _ => panic!(),
-                }
-                alloc
+                self.collect_symbols(alloc, child, &symbol, symbols)
             }
             Application(t1, t2) => {
-                // println!("Clone: Appl");
+                let (t1, t2) = (*t1, *t2);
                 let child1 = self.deep_clone(t1, symbols);
                 let child2 = self.deep_clone(t2, symbols);
                 // prntln!("Clone: lppA");
@@ -331,7 +308,7 @@ impl Ast {
             }
             Symbol(symbol, back_ref) => {
                 //println!("Clone: S{symbol} {:?}", self.t.get(back_ref).is_some());
-                self.create_leaf(&symbol, symbols, Some(back_ref))
+                self.create_leaf(&symbol.clone(), symbols, Some(*back_ref))
             }
         }
     }
@@ -361,9 +338,9 @@ fn main() {
     let pred = "λn.λf.λx.(((n (λg.λh.(h (g f)))) (λu.x)) (λu.u))";
 
     let u = "λx.λy.(y((x x) y))"; // Y combinator
-
     let if_0 = format!{"λn.((n λa.{false_fn}) {true_fn})"};
-    let frac_f = format!{"λf.λn.((({if_0} n) {one}) (f ({pred} n)))"};
+
+    let frac_f = format!{"λf.λn.((({if_0} n) {one}) (({times} n) (f ({pred} n))))"};
     let frac = format!{"(({u} {u}) {frac_f})"};
 
     //let input = format!("(({succ} {one}))");
@@ -371,61 +348,8 @@ fn main() {
     //let input = format!("(({plus} {two}) {three})");
     //let input = format!("(({times} {two}) {three})");
     //let input = format!("(({exp} {two}) {three})");
-    let input = format!("({frac} {one})");
+    let input = format!("({frac} {three})");
 
-    println!("");
-    println!("");
-    println!("");
-    println!("{input}");
     let mut ast = Ast::new(&input);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-    ast.print();
-    ast.beta_reduce(ast.head(), ast.hat, None);
-
-
-
-
+    ast.compute(true)
 }
