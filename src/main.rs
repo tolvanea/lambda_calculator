@@ -27,20 +27,13 @@ struct Ast {
     t: SlotMap<DefaultKey, AstNode>,  // tree
 }
 
-#[derive(PartialEq)]
-enum Currying {
-    Def,
-    Appl,
-    Stop,
-}
-
 impl Ast {
-    fn new(source_code: &str) -> Ast {
+    fn new(source_code: &str, print: bool) -> Ast {
         let re = Regex::new(r"([()λ\.])|([^()λ\.\s]+)").unwrap();
         let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
         let mut ast = Ast {t: SlotMap::new(), hat: null()};
         let mut symbols = HashMap::<CompactString, Vec<(DefaultKey, Vec<DefaultKey>)>>::new();
-        let head = ast.parse(&mut tokens, &mut symbols, Currying::Stop, 0);
+        let head = ast.parse(&mut tokens, &mut symbols, false, print as usize);
         ast.hat = ast.t.insert(Definition("hidden".into(), Vec::new(), head));
         ast
     }
@@ -189,13 +182,13 @@ impl Ast {
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = &'a str>>,
         symbols: &mut Symbols,
-        parsing: Currying,
+        parsing_parameter: bool,
         indt: usize,
     ) -> DefaultKey {
         let token = tokens.next().expect("Closing parenthesis missing");
         let next_char = token.chars().next().unwrap();
 
-        if next_char == 'λ' || parsing == Currying::Def {
+        if next_char == 'λ' || parsing_parameter {
             let symbol: CompactString = if next_char == 'λ' {
                 tokens.next().unwrap().trim_start().into()
             } else {
@@ -203,37 +196,41 @@ impl Ast {
             };
             let continue_on = if tokens.peek().unwrap().chars().next().unwrap() == '.' {
                 tokens.next().unwrap();
-                Currying::Stop
+                false
             } else {
-                Currying::Def
+                true
             };
 
-            println!("{}λ{symbol}", " ".repeat(4*indt));
+            if indt > 0 { println!("{}λ{symbol}", " ".repeat(4*indt)); }
             let alloc = self.t.insert(Definition(symbol.clone(), Vec::new(), null()));
             symbols.entry(symbol.clone()).or_insert(Vec::new()).push((alloc, Vec::new()));
             let child = self.parse(tokens, symbols, continue_on, indt+1);
             self.collect_symbols(alloc, child, &symbol, symbols)
         } else if next_char == '(' {
-            println!("{}(", " ".repeat(4*indt));
-            let left = self.parse(tokens, symbols, Currying::Stop, indt+1);
-            let ast = match *tokens.peek().unwrap() {
-                ")" => {
-                    println!("{})", " ".repeat(4*indt));
-                    left// Only one expression: no need to wrap it
+            if indt > 0 { println!("{}(", " ".repeat(4*indt)); }
+            let mut left = self.parse(tokens, symbols, false, indt+1);
+            let mut arguments = Vec::new();
+
+            while *tokens.peek().expect("Missing parenthesis ')'") != ")" {
+                arguments.push(self.parse(tokens, symbols, false, indt+1));
+            }
+            let ast = if arguments.is_empty() {
+                left// Only one expression: no need to wrap it
+            } else {
+                for argument in arguments {
+                    left = self.t.insert(Application(left, argument));
                 }
-                _ => {
-                    let right = self.parse(tokens, symbols, Currying::Stop, indt+1);
-                    println!("{})", " ".repeat(4*indt));
-                    self.t.insert(Application(left, right))
-                }
+                left
             };
+
+            if indt > 0 { println!("{})", " ".repeat(4*indt)); }
             assert_eq!(tokens.next(), Some(")"));
             ast
         } else if next_char == '(' {
             panic!("Syntax error '(' right before:\n{}", tokens.collect::<String>())
         } else {
             let symbol: CompactString = token.into();
-            println!("{}{symbol}", " ".repeat(4*indt));
+            if indt > 0 { println!("{}{symbol}", " ".repeat(4*indt)); }
             self.create_leaf(&symbol, symbols, None)
         }
     }
@@ -334,40 +331,47 @@ impl Ast {
 
 
 fn main() {
-    //let mut sm = SlotMap::new();
-    let true_fn = "λa.λb.a";
-    let false_fn = "λa.λb.b";
-    //let and_fn = format!("λx.λy.((x y) {false_fn})");
-    //let input = format!("(({and_fn} {true_fn}) {false_fn})");
+    let true_fn = "λa b.a";
+    let false_fn = "λa b.b";
+    let and_fn = format!("λx y.((x y) {false_fn})");
+    let input = format!("(({and_fn} {true_fn}) {false_fn})");
 
-    let zero = "λz.λx.x";
-    let one = "λa.λx.(a x)";
-    let two = "λb.λx.(b (b x))";
-    let three = "λc.λz.(c (c (c z)))";
-    let four = "λc.λx.(c (c (c (c x))))";
+    let zero = "λ z x.x";
+    let one = "λ a x.(a x)";
+    let two = "λ b x.(b (b x))";
+    let three = "λ c z.(c (c (c z)))";
 
-    let plus = "λn.λm.λf.λx.((n f)((m f) x))";
-    let times = "λn.λm.λf.(m (n f))";
-    let exp = "λn.λm.(n m)";
+    let plus = "λ n m f x.((n f)((m f) x))";
+    let times = "λ n m f.(m (n f))";
+    let exp = "λ n m.(n m)";
 
-    let succ = "λn1.λd.λx.(d ((n1 d) x))";
-    let pred = "λn.λf.λx.(((n (λg.λh.(h (g f)))) (λu.x)) (λu.u))";
+    let succ = "λ n1 d x.(d ((n1 d) x))";
+    let pred = "λ n f x.(((n (λ g h.(h (g f)))) (λ u.x)) (λ u.u))";
 
-    let u = "λx.λy.(y((x x) y))"; // Y combinator
-    let if_0 = format!{"λn.((n λa.{false_fn}) {true_fn})"};
+    let u = "λ x y.(y((x x) y))"; // Y combinator
+    let if_0 = format!{"λ n.((n λ a.{false_fn}) {true_fn})"};
 
-    let frac_f = format!{"λf.λn.((({if_0} n) {one}) (({times} n) (f ({pred} n))))"};
+    let frac_f = format!{"λ f n.((({if_0} n) {one}) (({times} n) (f ({pred} n))))"};
     let frac = format!{"(({u} {u}) {frac_f})"};
 
-    //let input = format!("(({succ} {one}))");
-    //let input = format!("(({pred} {three}))");
-    //let input = format!("(({plus} {two}) {three})");
-    //let input = format!("(({times} {two}) {three})");
-    //let input = format!("(({exp} {two}) {three})");
-    //let input = format!("({frac} {three})");
+    let inputs = [
+        ("false", format!("({and_fn} {true_fn} {false_fn})")),
+        ("true", format!("({and_fn} {true_fn} {true_fn})")),
+        ("true", format!("({if_0} {zero})")),
+        ("2", format!("(({succ} {one}))")),
+        ("2", format!("(({pred} {three}))")),
+        ("5", format!("(({plus} {two}) {three})")),
+        ("6", format!("(({times} {two}) {three})")),
+        ("9", format!("(({exp} {two}) {three})")),
+        ("6", format!("({frac} {three})")),
+    ];
+    for (name, input) in inputs {
+        let mut ast = Ast::new(&input, false);
+        println!("{input}");
+        println!("{}", ast.print_flat(ast.head()));
+        ast.compute(false);
+        ast.print();
+        println!("{name}");
 
-    let input = "λ n m f x . ((n f)((m f) x))";
-
-    let mut ast = Ast::new(&input);
-    ast.compute(true)
+    }
 }
