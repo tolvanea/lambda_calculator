@@ -3,7 +3,7 @@ use regex::Regex;
 use compact_str::CompactString;
 use std::iter::Peekable;
 use slotmap::Key;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use AstNode::{Definition, Application, Symbol};
 
 type Symbols = HashMap<CompactString, Vec<(DefaultKey, Vec<DefaultKey>)>>;
@@ -24,18 +24,29 @@ enum AstNode {
 
 struct Ast {
     hat: DefaultKey, // Invisible dummy node above the head
+    bindings: HashMap<CompactString, DefaultKey>,
     t: SlotMap<DefaultKey, AstNode>,  // tree
 }
 
 impl Ast {
     fn new(source_code: &str, print: bool) -> Ast {
-        let re = Regex::new(r"([()])|(λ\s*[^()λ\.]+)\.|([^()λ\.\s\r\n]+)").unwrap();
-        let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
-        let mut ast = Ast {t: SlotMap::new(), hat: null()};
-        let mut symbols = Symbols::new();
-        let head = ast.parse(&mut tokens, &mut symbols, print as usize);
+        let mut ast = Ast {t: SlotMap::new(), bindings:HashMap::new(), hat: null()};
+
+        ast.read_definitions("definitions.λ", print);
+
+        let head = ast.parse(source_code, print);
         ast.hat = ast.t.insert(Definition("^".into(), Vec::new(), head));
+
         ast
+    }
+
+    fn set(&mut self, source_code: &str, print: bool) {
+        self.remove(self.head());
+        let head = self.parse(source_code, print);
+        match self.t.get_mut(self.hat).unwrap() {
+            Definition(_, _, child) => *child = head,
+            _ => panic!(),
+        }
     }
 
     fn head(&self) -> DefaultKey {
@@ -164,7 +175,12 @@ impl Ast {
                         _ => panic!(),
                     }
                 }
-                None => panic!("Unknown symbol '{symbol}'")
+                None => { // Is executed only when parsing
+                    match self.bindings.get(symbol) {
+                        Some(ast) => return self.deep_clone(*ast, &mut HashMap::new()),
+                        None => panic!("Unknown symbol '{symbol}'"),
+                    }
+                }
             }
         };
         def_symbols.push(alloc);
@@ -175,7 +191,14 @@ impl Ast {
         alloc
     }
 
-    fn parse<'a>(
+    fn parse(&mut self, source_code: &str, print: bool) -> DefaultKey {
+        let mut symbols = Symbols::new();
+        let re = Regex::new(r"([()])|(λ\s*[^()λ\.]+)\.|([^()λ\.\s\r\n]+)").unwrap();
+        let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
+        self.parse_rec(&mut tokens, &mut symbols, print as usize)
+    }
+
+    fn parse_rec<'a>(
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = &'a str>>,
         symbols: &mut Symbols,
@@ -198,7 +221,7 @@ impl Ast {
                 applications.push((symbol, alloc));
             }
 
-            let mut child = self.parse(tokens, symbols, indt1);
+            let mut child = self.parse_rec(tokens, symbols, indt1);
 
             for (symbol, alloc) in applications.iter().rev() {
                 self.collect_symbols(*alloc, child, &symbol, symbols);
@@ -207,11 +230,11 @@ impl Ast {
             child
         } else if next_char == '(' {
             if indt > 0 { println!("{}(", " ".repeat(4*indt)); }
-            let mut left = self.parse(tokens, symbols, indt1);
+            let mut left = self.parse_rec(tokens, symbols, indt1);
             let mut arguments = Vec::new();
 
             while *tokens.peek().expect("Missing parenthesis ')'") != ")" {
-                arguments.push(self.parse(tokens, symbols, indt1));
+                arguments.push(self.parse_rec(tokens, symbols, indt1));
             }
             let ast = if arguments.is_empty() {
                 left// Only one expression: no need to wrap it
@@ -322,54 +345,98 @@ impl Ast {
             }
         }
     }
+
+    fn remove(&mut self, key: DefaultKey) {
+        match self.t.get(key).unwrap() {
+            Definition(_, _, t) => {
+                self.remove(*t);
+            }
+            Application(t1, t2) => {
+                let (t1, t2) = (*t1, *t2);  // Rust being rust
+                self.remove(t1);
+                self.remove(t2);
+            }
+            Symbol(_, _) => (),
+        }
+        self.t.remove(key).unwrap();
+    }
+
+
+    fn read_definitions(&mut self, filename: &str, print: bool) {
+        let source_code: String = std::fs::read_to_string(filename).unwrap();
+
+        for line in source_code.lines(){
+            // Remove comments
+            let line = match line.find("#") {
+                Some(n) => &line[0..n],
+                None => line
+            };
+            if line.starts_with("let ") {
+                let (variable_name, the_rest) = match line.find("=") {
+                    Some(n) => (line[4..n].trim(), line[n+1..].trim()),
+                    None => panic!("Syntax error on line\n{}", line),
+                };
+                assert!(variable_name.chars().all(|c| !c.is_whitespace() && c != 'λ'));
+
+                if print {println!("let {} =", variable_name);}
+                let body = self.parse(&the_rest, print);
+                self.bindings.insert(variable_name.into(), body);
+            } else if line.trim() != "" {
+                panic!("Syntax error, following line is not formatted \"let _ = ...\"\n{line}");
+            }
+        }
+    }
 }
 
 
 
 
 fn main() {
-    let true_fn = "λab.a";
-    let false_fn = "λab.b";
-    let and_fn = format!("λxy.((x y) {false_fn})");
-
-    let zero = "λzx.x";
-    let one = "λax.(a x)";
-    let two = "λbx.(b (b x))";
-    let three = "λcz.(c (c (c z)))";
-
-    let plus = "λnmfx.((n f) (m f x))";
-    let times = "λnmf.(m (n f))";
-    let exp = "λnm.(n m)";
-
-    let succ = "λndx.(d (n d x))";
-    let pred = "λnfx.(n λgh.(h (g f)) (λu.x) (λu.u))";
-
-    let u = "λxy.(y (x x y))"; // Y combinator
-    let if_0 = format!{"λn.((n λa.{false_fn}) {true_fn})"};
-
-    let frac_f = format!{"λfn.({if_0} n {one} ({times} n (f ({pred} n))))"};
-    let frac = format!{"({u} {u} {frac_f})"};
+    // let true_fn = "λab.a";
+    // let false_fn = "λab.b";
+    // let and_fn = format!("λxy.((x y) {false_fn})");
+    //
+    // let zero = "λzx.x";
+    // let one = "λax.(a x)";
+    // let two = "λbx.(b (b x))";
+    // let three = "λcz.(c (c (c z)))";
+    //
+    // let plus = "λnmfx.((n f) (m f x))";
+    // let times = "λnmf.(m (n f))";
+    // let exp = "λnm.(n m)";
+    //
+    // let succ = "λndx.(d (n d x))";
+    // let pred = "λnfx.(n λgh.(h (g f)) (λu.x) (λu.u))";
+    //
+    // let u = "λxy.(y (x x y))"; // Y combinator
+    // let if_0 = format!{"λn.((n λa.{false_fn}) {true_fn})"};
+    //
+    // let frac_f = format!{"λfn.({if_0} n {one} ({times} n (f ({pred} n))))"};
+    // let frac = format!{"({u} {u} {frac_f})"};
 
     let inputs = [
-        ("false", format!("({and_fn} {true_fn} {false_fn})")),
-        ("true", format!("({and_fn} {true_fn} {true_fn})")),
-        ("true", format!("({if_0} {zero})")),
-        ("2", format!("(({succ} {one}))")),
-        ("2", format!("(({pred} {three}))")),
-        ("5", format!("(({plus} {two}) {three})")),
-        ("6", format!("(({times} {two}) {three})")),
-        ("9", format!("(({exp} {two}) {three})")),
-        ("6", format!("({frac} {three})")),
-        ("astrophe", format!("(λ x y. (y x) λ y. y)")),
+        ("false", "(and true false)"),
+        ("true", "(and true true)"),
+        ("true", "(if_0 0)"),
+        ("2", "(+1 1)"),
+        ("2", "(-1 3)"),
+        ("5", "(+ 2 3)"),
+        ("6", "(* 2 3)"),
+        ("9", "(^ 2 3)"),
+        ("6", "(! 3)"),
+        ("astrophe", "(λ x y. (y x) λ y. y)"),
     ];
-    //for (name, input) in [("muu", format!("λbx.(b (b x))"))] {
+    //for (name, input) in [("muu", "(and true false)")] {
+    let print = false;
+    let mut ast = Ast::new("λa.a", print);
     for (name, input) in inputs {
         println!("{name}");
-        println!("{input}");
-        let mut ast = Ast::new(&input, false);
+        print!("input: {input}\nast: ");
+        ast.set(input, print);
         ast.print();
-        ast.compute(false);
+        ast.compute(print);
         ast.print();
         println!("");
     }
+    dbg!(ast.t.len());
 }
