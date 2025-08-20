@@ -175,9 +175,12 @@ impl Ast {
                         _ => panic!(),
                     }
                 }
-                None => { // Is executed only when parsing
+                None => { // Replace symbol with definition. Executed only when parsing
                     match self.bindings.get(symbol) {
-                        Some(ast) => return self.deep_clone(*ast, &mut HashMap::new()),
+                        Some(ast) => {
+                            self.t.remove(alloc); // Useless alloc-dealloc :/
+                            return self.deep_clone(*ast, &mut HashMap::new())
+                        }
                         None => panic!("Unknown symbol '{symbol}'"),
                     }
                 }
@@ -290,6 +293,7 @@ impl Ast {
                                 Symbol(_, back_ref) => {
                                     match self.t.get_mut(*back_ref).unwrap() {
                                         Definition(_, ss, _) => {
+                                            // Deep cloned symbol has been already pushed to ss
                                             for s in ss {
                                                 if *s == arg_addr {*s = *reference}
                                             }
@@ -300,6 +304,9 @@ impl Ast {
                                 _ => {}
                             }
                             *self.t.get_mut(*reference).unwrap() = arg_copied;
+                        }
+                        if symbols.is_empty() {
+                            self.remove(arg) // No replacements, delete the whole argument
                         }
                         match self.t.get_mut(grand_parent).unwrap() {
                             Definition(_, _, t) => {*t = n}
@@ -356,7 +363,16 @@ impl Ast {
                 self.remove(t1);
                 self.remove(t2);
             }
-            Symbol(_, _) => (),
+            Symbol(_, back_ref) => {
+                match self.t.get_mut(*back_ref).unwrap() {
+                    Definition(_, ss, _) => {
+                        ss.iter()
+                            .position(|s| *s==key)
+                            .map(|pos| ss.swap_remove(pos));
+                    }
+                    _ => panic!(),
+                }
+            },
         }
         self.t.remove(key).unwrap();
     }
