@@ -1,27 +1,28 @@
 # Logic operators
-let true = λab.a
-let false = λab.b
-let and = λxy.(x y false)
+true = λab.a
+false = λab.b
+and = λxy.(x y false)
 
 # Numbers
-let 0 = λzx.x
-let 1 = λax.(a x)
-let 2 = λbx.(b (b x))
-let 3 = λcz.(c (c (c z)))
-
-# Arithmetic
-let + = λnmfx.((n f) (m f x))
-let * = λnmf.(m (n f))
-let ^ = λnm.(n m)
+0 = λzx.x
+1 = λax.(a x)
+2 = λbx.(b (b x))
+3 = λcz.(c (c (c z)))
 
 # +1, -1
-let +1 = λndx.(d (n d x))
-let -1 = λnfx.(n λgh.(h (g f)) (λu.x) (λu.u))
++1 = λndx.(d (n d x))
+-1 = λnfx.(n λgh.(h (g f)) (λu.x) (λu.u))
+
+# Arithmetic
++ = λnmfx.((n f) (m f x))
+* = λnmf.(m (n f))
+^ = λnm.(n m)
+
 
 # Recursion magic
-let u = λxy.(y (x x y)) # square root of Y combinator
+u = λxy.(y (x x y)) # square root of Y combinator
 
-let if_0 = λn.((n λa.false) true)
+if_0 = λn.((n λa.false) true)
 
-let frac = λfn.(if_0 n 1 (* n (f (-1 n))))
-let ! = (u u frac)
+frac = λfn.(if_0 n 1 (* n (f (-1 n))))
+! = (u u frac)

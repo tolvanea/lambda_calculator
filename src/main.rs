@@ -103,7 +103,7 @@ impl Ast {
     //     }
     // }
 
-    #[allow(dead_code)]
+    // symbols is only for counting astrophes '
     fn print_flat(&self, node: DefaultKey, symbols: &mut Symbols) -> String {
         match self.t.get(node).unwrap() {
             Definition(s, ss, t) => {
@@ -387,19 +387,21 @@ impl Ast {
                 Some(n) => &line[0..n],
                 None => line
             };
-            if line.starts_with("let ") {
-                let (variable_name, the_rest) = match line.find("=") {
-                    Some(n) => (line[4..n].trim(), line[n+1..].trim()),
-                    None => panic!("Syntax error on line\n{}", line),
-                };
-                assert!(variable_name.chars().all(|c| !c.is_whitespace() && c != 'λ'));
-
-                if print {println!("let {} =", variable_name);}
-                let body = self.parse(&the_rest, print);
-                self.bindings.insert(variable_name.into(), body);
-            } else if line.trim() != "" {
-                panic!("Syntax error, following line is not formatted \"let _ = ...\"\n{line}");
+            if line.trim() == "" {
+                continue
             }
+            let (variable_name, the_rest) = match line.find("=") {
+                Some(n) => (line[..n].trim(), line[n+1..].trim()),
+                None => panic!("Syntax error on line:\n{line}\nNo assignment \"=\" found"),
+            };
+            assert!(
+                variable_name.chars().all(|c| !c.is_whitespace() && c != 'λ'),
+                "Can not assign to '{variable_name}'"
+            );
+
+            if print {println!("{} =", variable_name);}
+            let body = self.parse(&the_rest, print);
+            self.bindings.insert(variable_name.into(), body);
         }
     }
 }
