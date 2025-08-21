@@ -56,7 +56,7 @@ impl Ast {
         }
     }
 
-    fn print(&self) {
+    fn print(&mut self) {
         let mut symbols = Symbols::new();
         println!("{}", self.print_flat(self.head(), &mut symbols));
     }
@@ -103,33 +103,48 @@ impl Ast {
     //     }
     // }
 
-    // symbols is only for counting astrophes '
-    fn print_flat(&self, node: DefaultKey, symbols: &mut Symbols) -> String {
-        match self.t.get(node).unwrap() {
-            Definition(s, ss, t) => {
-                // Invariant: all references are valid
-                for sn in ss{
-                    match self.t.get(*sn).unwrap() {
-                        Symbol(_s, br) => assert!(self.t.get(*br).is_some()),
-                        _ => panic!(),
-                    }
-                }
+    // symbols is only for counting astrophes ', and takes &mut only for internal book keeping
+    fn print_flat(&mut self, node: DefaultKey, symbols: &mut Symbols) -> String {
+        // Due to rust's borrow checker, this function is obsfuscated
+        let mut symbol2 = CompactString::new("");
+        let out = match self.t.get_mut(node).unwrap() {
+            Definition(s, _, t) => {
+                let t = *t;
                 let shadows = symbols.entry(s.clone()).or_insert(Vec::new());
                 shadows.push((node, Vec::new()));
-                let duplicates = shadows.len() - 1;
-                let rest = self.print_flat(*t, symbols);
+                symbol2 = format!("{s}{}", "'".repeat(shadows.len() - 1)).into();
+                let symbol_with_astrophes = symbol2.clone();
+                // Temporarily overwrite symbol name for children
+                std::mem::swap(s, &mut symbol2);
+                let rest = self.print_flat(t, symbols);
+                format!("λ{symbol_with_astrophes}.{}", rest)
+            }
+            Application(t1, t2) => {
+                let t1 = *t1; // Yes, borrow checker is this stupid
+                let t2 = *t2;
+                format!(
+                    "({} {})",
+                    self.print_flat(t1, symbols),
+                    self.print_flat(t2, symbols),
+                )
+            }
+            Symbol(_, backref) => {
+                let backref = *backref;
+                match self.t.get(backref).unwrap() {
+                    Definition(s, _, _) => format!("{s}"),
+                    _ => panic!(),
+                }
+            }
+        };
+        // Return temporal symbol overwrite back to normal. Borrow checker wants it separate.
+        match self.t.get_mut(node).unwrap() {
+            Definition(s, _, _) => {
+                std::mem::swap(s, &mut symbol2);
                 symbols.get_mut(s).unwrap().pop();
-                format!("λ{s}{}.{}", "'".repeat(duplicates), rest)
             }
-            Application(t1, t2) => format!(
-                "({} {})",
-                self.print_flat(*t1, symbols),
-                self.print_flat(*t2, symbols),
-            ),
-            Symbol(s, _) => {
-                format!("{s}{}", "'".repeat(symbols.get(s).unwrap().len() - 1))
-            }
+            _ => ()
         }
+        out
     }
 
     // Works together with create_leaf
