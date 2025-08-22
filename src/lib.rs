@@ -355,21 +355,23 @@ impl Ast {
 
     fn read_source_code(&mut self, source_code: &str, print: bool) {
         let mut position = 0;
-        for line in source_code.split_inclusive('\n') {
+        for line_raw in source_code.split_inclusive('\n') {
             // Remove comments
-            let line = match line.find("#") {
-                Some(n) => &line[0..n],
-                None => line
+            let line = match line_raw.find("#") {
+                Some(n) => &line_raw[0..n].trim(),
+                None => line_raw.trim()
             };
-            let line = line.trim();
             if line == "" {
-                position += line.len();
+                position += line_raw.len();
                 continue
             }
             let (variable_name, the_rest) = match line.find("=") {
                 Some(n) => (line[..n].trim(), line[n+1..].trim()),
                 None => {
-                    if line.trim() == "in" || self.bindings.is_empty() {
+                    if line.trim() == "in" {
+                        position += line_raw.len();
+                        break
+                    } else if self.bindings.is_empty() {
                         break
                     } else {
                         panic!("Syntax error on line:\n{line}\nNo assignment \"=\" found")
@@ -380,7 +382,7 @@ impl Ast {
                 variable_name.chars().all(|c| !c.is_whitespace() && c != 'λ'),
                 "Can not assign to '{variable_name}'"
             );
-            position += line.len();
+            position += line_raw.len();
 
             if print {println!("{} =", variable_name);}
             let body = self.parse(&the_rest, print);
@@ -391,4 +393,14 @@ impl Ast {
         let head = self.parse(last_lambda_expression, print);
         self.hat = self.t.insert(Definition("^".into(), Vec::new(), head));
     }
+}
+
+#[test]
+fn test() {
+    let inn = "AA = λab.a\n
+BB = λab.b\n
+and = λxy.(x y BB)\n
+in\n
+(and AA BB)".to_string();
+    Ast::read_string_and_compute(&inn, true);
 }
