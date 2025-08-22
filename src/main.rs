@@ -29,15 +29,19 @@ struct Ast {
 }
 
 impl Ast {
-    fn new(source_code: &str, print: bool) -> Ast {
+    fn new(print: bool) -> Ast {
         let mut ast = Ast {t: SlotMap::new(), bindings:HashMap::new(), hat: null()};
 
-        ast.read_definitions("definitions.λ", print);
-
-        let head = ast.parse(source_code, print);
-        ast.hat = ast.t.insert(Definition("^".into(), Vec::new(), head));
+        let source_code: String = std::fs::read_to_string("definitions.λ").unwrap();
+        ast.read_source_code(&source_code, print);
 
         ast
+    }
+
+    fn read_string_and_compute(&mut self, source_code: &str, debug_parsing: bool) -> String {
+        let mut ast = Ast {t: SlotMap::new(), bindings:HashMap::new(), hat: null()};
+        ast.read_source_code(source_code, debug_parsing);
+        ast.compute_to_string()
     }
 
     fn set(&mut self, source_code: &str, print: bool) {
@@ -71,6 +75,20 @@ impl Ast {
                 break
             }
         }
+    }
+
+    fn compute_to_string(&mut self) -> String {
+        use std::fmt::Write;
+        let mut symbols = Symbols::new();
+        let mut out = format!("{:<5} {}\n", 0, self.print_flat(self.head(), &mut symbols));
+        for i in 1..1000000 {
+            let mut symbols = Symbols::new();
+            if !self.beta_reduce(self.head(), self.hat, None) {
+                break
+            }
+            write!(&mut out, "{:<5} {}\n", i, self.print_flat(self.head(), &mut symbols));
+        }
+        out
     }
 
     // fn debug(&self, node: DefaultKey) {
@@ -393,21 +411,31 @@ impl Ast {
     }
 
 
-    fn read_definitions(&mut self, filename: &str, print: bool) {
-        let source_code: String = std::fs::read_to_string(filename).unwrap();
+    fn read_source_code(&mut self, source_code: &str, print: bool) {
+        let mut lines = source_code.split_inclusive('\n');
 
-        for line in source_code.lines(){
+        let mut position = 0;
+
+        for line in lines {
+            position += line.len();
             // Remove comments
             let line = match line.find("#") {
                 Some(n) => &line[0..n],
                 None => line
             };
-            if line.trim() == "" {
+            let line = line.trim();
+            if line == "" {
                 continue
             }
             let (variable_name, the_rest) = match line.find("=") {
                 Some(n) => (line[..n].trim(), line[n+1..].trim()),
-                None => panic!("Syntax error on line:\n{line}\nNo assignment \"=\" found"),
+                None => {
+                    if line.trim() == "in" {
+                        break
+                    } else {
+                        panic!("Syntax error on line:\n{line}\nNo assignment \"=\" found")
+                    }
+                }
             };
             assert!(
                 variable_name.chars().all(|c| !c.is_whitespace() && c != 'λ'),
@@ -418,6 +446,10 @@ impl Ast {
             let body = self.parse(&the_rest, print);
             self.bindings.insert(variable_name.into(), body);
         }
+
+        let last_lambda_expression = source_code[position..].trim();
+        let head = self.parse(last_lambda_expression, print);
+        self.hat = self.t.insert(Definition("^".into(), Vec::new(), head));
     }
 }
 
@@ -446,6 +478,9 @@ fn main() {
     //
     // let frac_f = format!{"λfn.({if_0} n {one} ({times} n (f ({pred} n))))"};
     // let frac = format!{"({u} {u} {frac_f})"};
+    //λn.((n λx.λx'.(x' (x' x'))) λy.y)
+    //λn.((n λm.λx .(m  (m  x)))  λb.λx.(b (b x)))
+
 
     let inputs = [
         ("false", "(and true false)"),
@@ -457,19 +492,22 @@ fn main() {
         ("6", "(* 2 3)"),
         ("9", "(^ 2 3)"),
         ("6", "(! 3)"),
+        ("14", "(rfold + 0 (map (^ 2) 123))"),
         ("astrophe", "(λ x y. (y x) λ y. y)"),
     ];
-    //for (name, input) in [("muu", "(and true false)")] {
     let print = false;
-    let mut ast = Ast::new("λa.a", print);
-    for (name, input) in inputs {
-        println!("{name}");
-        print!("input: {input}\nast: ");
-        ast.set(input, print);
-        ast.print();
-        ast.compute(print);
-        ast.print();
-        println!("");
-    }
-    dbg!(ast.t.len());
+    let mut ast = Ast::new(print);
+    ast.compute(true);
+
+    //for (name, input) in [("9", "(^ 2 3)")] {
+    // for (name, input) in [("muu", "(↑↑ 2 3)")] {
+    // //for (name, input) in inputs {
+    //     println!("{name}");
+    //     print!("input: {input}\nast: ");
+    //     ast.set(input, print);
+    //     ast.print();
+    //     ast.print();
+    //     println!("");
+    // }
+    // dbg!(ast.t.len());
 }
