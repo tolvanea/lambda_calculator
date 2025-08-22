@@ -146,44 +146,31 @@
         <div id="right-side-panel">
             <div id="doc-container">
                 <h1>What is this?</h1><p>
-                Untyped lambda calculus evaluation tool, which is technically a turing complete programming language.
+                Untyped lambda calculus evaluation tool. It happens to be also a turing complete programming language.
                 <h2>Umm, what?</h2><p>
                 For example, this is a lambda function that takes two arguments <code>a</code> and <code>b</code>, and returns the first argument <code>a</code>
-                <pre><code>
-λab.a
-                </code></pre>
+                <pre><code>λab.a</code></pre>
                 it can be called with two parameters with parenthesis like so:
-                <pre><code>
-(λab.a parameter1 parameter2)
-                </code></pre>
+                <pre><code>(λab.a parameter1 parameter2)</code></pre>
                 this evaluates to
-                <pre><code>
-parameter1
-                </code></pre>
+                <pre><code>parameter1</code></pre>
                 You can assign names to functions and expressions. This is a valid full program you can copy paste it to the left
-                <pre><code>
-parameter1 = λc.c
+                <pre><code>parameter1 = λc.c
 parameter2 = λd.d
 in
-(λab.a parameter1 parameter2)
-                </code></pre>
+(λab.a parameter1 parameter2)</code></pre>
                 which should evaluate to
-                <pre><code>
-λc.c
-                </code></pre>
+                <pre><code>λc.c</code></pre>
+
                 <h2>Ok, and?</h2><p>
                 That's it! There is nothing more! No classes, no structs, no numbers, no booleans. Only pure lambda functions. The task here is to build everything on top of lambda functions. For example booleans can be encoded like so:
-                <pre><code>
-true = λab.a
+                <pre><code>true = λab.a
 false = λab.b
 and = λxy.(x y false)
 in
-(and true false)
-                </code></pre>
+(and true false)</code></pre>
                 Try copy-pasting it to the left, it evaluates to
-                <pre><code>
-λa.λb.b
-                </code></pre>
+                <pre><code>λa.λb.b</code></pre>
                 <h4>Wait why <code>λa.λb.b</code> instead of <code>λab.b</code>?</h4><p>
                 That is the same thing, it is just internal way to represent multiparameter functions. A two parameter function <code>λab</code> is the same as a single parameter function <code>λa</code> that returns a single parameter function <code>λb</code>. If you feed it two parameters, it the outcome is the same
 
