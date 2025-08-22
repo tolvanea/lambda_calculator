@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en-US">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Lambda calculator</title>
+        <style>
+            body {
+                display: flex;
+                height: 98vh; /* Full height of the viewport */
+                margin: 0; /* Remove default margin */
+            }
+
+            #main-container {
+                display: flex;
+                padding: 20px; /* Add padding */
+                flex: 0 0 68%; /* Left side: 60% width */
+                flex-direction: column;
+                height: 95vh
+            }
+
+            #right-side-panel {
+                /*display: flex;*/
+                padding: 20px; /* Add padding */
+                flex: 0 0 28%; /* Rigth side: 30% width */
+                flex-direction: column;
+                background-color: #f0f0f0; /* Light background color for documentation */
+            }
+
+            #doc-container {
+                flex: 1; /* Occupy the top half */
+                display: flex; /* Use flexbox for layout */
+                flex-direction: column; /* Stack children vertically */
+                /*flex: 0 0 28%; /* Right side: 40% width */
+                padding: 20px; /* Add padding */
+                /*background: color url('images/ponka.png') others;*/
+                overflow-y: auto; /* Enable vertical scrolling if needed */
+                height: 63vh;
+                justify-content: flex-start; /* Align content to the top */
+                /*justify-content: center;*/
+                /*align-items: center;*/
+            }
+
+            .image-wrapper {
+                flex: 1; /* Occupy the top half */
+                display: flex; /* Use flexbox for centering */
+                justify-content: center; /* Center the image horizontally */
+                width: 100%; /* Full width of the container */
+                margin-top: auto; /* Push the image to the bottom of the container */
+                height: 30vh;
+            }
+
+            #input-container {
+                display: flex;
+                flex-direction: column;
+                justify-content: center; /* Center content vertically */
+                align-items: center;
+                padding: 20px; /* Add padding */
+                height: 50vh;
+            }
+
+            #how-the-fuck-i-center-a-div {
+                display: flex;
+                align-items: center;
+                justify-content: center
+            }
+
+            #output-container {
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-start; /* Align content to the top */
+                padding: 20px; /* Add padding */
+                height: 40vh;
+                overflow-y: auto
+            }
+
+            /* Style for the output area */
+            #output {
+                font-family: monospace; /* Set to monospace font */
+                white-space: pre; /* Preserve whitespace */
+                border: 1px solid #ccc; /* Add a border */
+                padding: 00px; /* Add some padding */
+                background-color: #f9f9f9; /* Light background color */
+                height: 100%;
+                overflow-y: auto; /* Enable vertical scrolling if needed */
+            }
+
+            #input {
+                flex: 0; /* Allow the textarea to grow */
+                height: 100%;
+                width: 100%; /* Full width */
+                resize: none; /* Prevent resizing */
+                padding: 00px; /* Add padding */
+                border: 1px solid #ccc; /* Add a border */
+                border-radius: 4px; /* Rounded corners */
+            }
+
+            #compile {
+                margin: 20px 0; /* Add margin around the button */
+                width: 50%;
+                height: 50px;
+                font-size: 25px;
+                border-radius: 6px;
+                background-color: #70abff;
+                color: white;
+                cursor: pointer;
+            }
+
+            #doc-image {
+                max-height: 100%; /* Scale the image to fit within the container's height */
+                max-width: 100%; /* Ensure the image does not exceed the container's width */
+                height: auto; /* Maintain aspect ratio */
+                width: auto; /* Maintain aspect ratio */
+                opacity: 0.5; /* Set transparency to 50% */
+                margin-top: auto; /* Push the image to the bottom of the container */
+            }
+        </style>
+    </head>
+    <body>
+        <div id="main-container">
+            <h1>Lambda calculator</h1>
+            <div id="input-container">
+                <textarea id="input" placeholder="Type something..." rows="5" style="flex: 1; width: 100%;"></textarea>
+            </div>
+            <div id="how-the-fuck-i-center-a-div">
+              <button id="compile">go brrrrrrrrr</button>
+            </div>
+            <div id="output-container">
+                <div id="output" aria-label="Output will appear here..."></div>
+            </div>
+        </div>
+        <div id="right-side-panel">
+          <div id="doc-container">
+              <h2>What is this?</h2>
+              <p>TODO writing docs is the boring part.</p>
+
+          </div>
+          <div class="image-wrapper"> <!-- New wrapper for the image -->
+              <img src="images/twi.png" alt="structure and interpretation of computer programs" id="doc-image">
+          </div>
+        </div>
+
+
+        <script type="module">
+            import init, { process_input } from './pkg/lambdlang.js';
+
+            async function run() {
+                await init();
+                document.getElementById('compile').onclick = () => {
+                    const input = document.getElementById('input').value;
+                    const output = process_input(input);
+                    document.getElementById('output').textContent = output;
+                };
+            }
+            run();
+        </script>
+    </body>
+</html>
