@@ -17,12 +17,31 @@ and = λxy.(x y false)
 + = λnmfx.((n f) (m f x))
 * = λnmf.(m (n f))
 ^ = λnm.(n m)
+- = λmn.n -1 m
+↑↑ = λmn.((-1 n) (^ m) m)
 
+# Pairs
+pair = λxyf.(f x y)
+nil = false
+fst = λl.(l λhtd.h nil)
+snd = λl.(l λhtd.t nil)
+is_nill = λl.(l λhtd.false true)
+
+123 = (pair 1 (pair 2 (pair 3 nil)))
 
 # Recursion magic
 u = λxy.(y (x x y)) # square root of Y combinator
+Y = (u u)
 
 if_0 = λn.((n λa.false) true)
 
 frac = λfn.(if_0 n 1 (* n (f (-1 n))))
 ! = (u u frac)
+
+rfold = λfa.(Y (λrl.(l λhtd.(f (r t) h) a)))
+map = λf.(rfold (λah.(pair (f h) a)) nil)
+
+
+in
+
+(↑↑ 2 3)
