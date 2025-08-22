@@ -8,21 +8,23 @@
             body {
                 display: flex;
                 height: 98vh; /* Full height of the viewport */
+                width: 99vw; /* Full height of the viewport */
                 margin: 0; /* Remove default margin */
             }
 
             #main-container {
                 display: flex;
                 padding: 20px; /* Add padding */
-                flex: 0 0 68%; /* Left side: 60% width */
+                /*flex: 0 0 68%; /* Left side: 60% width */
                 flex-direction: column;
-                height: 95vh
+                width: 68vw;
             }
 
             #right-side-panel {
                 /*display: flex;*/
                 padding: 20px; /* Add padding */
-                flex: 0 0 28%; /* Rigth side: 30% width */
+                /*flex: 0 0 28%; /* Rigth side: 30% width */
+                width: 28vw;
                 flex-direction: column;
                 background-color: #f0f0f0; /* Light background color for documentation */
             }
@@ -39,6 +41,7 @@
                 justify-content: flex-start; /* Align content to the top */
                 /*justify-content: center;*/
                 /*align-items: center;*/
+                border: 3px solid #ccc; /* Add a border */
             }
 
             .image-wrapper {
@@ -71,7 +74,8 @@
                 justify-content: flex-start; /* Align content to the top */
                 padding: 20px; /* Add padding */
                 height: 40vh;
-                overflow-y: auto
+                overflow-y: auto;
+                overflow-x: auto;
             }
 
             /* Style for the output area */
@@ -79,7 +83,7 @@
                 font-family: monospace; /* Set to monospace font */
                 white-space: pre; /* Preserve whitespace */
                 border: 1px solid #ccc; /* Add a border */
-                padding: 00px; /* Add some padding */
+                padding: 20px; /* Add some padding */
                 background-color: #f9f9f9; /* Light background color */
                 height: 100%;
                 overflow-y: auto; /* Enable vertical scrolling if needed */
@@ -90,7 +94,7 @@
                 height: 100%;
                 width: 100%; /* Full width */
                 resize: none; /* Prevent resizing */
-                padding: 00px; /* Add padding */
+                padding: 20px; /* Add padding */
                 border: 1px solid #ccc; /* Add a border */
                 border-radius: 4px; /* Rounded corners */
             }
@@ -114,13 +118,23 @@
                 opacity: 0.5; /* Set transparency to 50% */
                 margin-top: auto; /* Push the image to the bottom of the container */
             }
+
+            code {
+                /*background-color: #d4d4d4; /* Light gray background for the code block */
+                color: #003344; /* Darker text color for the code */
+                font-family: 'Courier New', Courier, monospace; /* Monospace font for code */
+            }
+
+            .bold {
+                font-weight: bold;
+            }
         </style>
     </head>
     <body>
         <div id="main-container">
             <h1>Lambda calculator</h1>
             <div id="input-container">
-                <textarea id="input" placeholder="Type something..." rows="5" style="flex: 1; width: 100%;"></textarea>
+                <textarea id="input" placeholder="Type the lambda expression here" rows="5" style="flex: 1; width: 100%;"></textarea>
             </div>
             <div id="how-the-fuck-i-center-a-div">
               <button id="compile">go brrrrrrrrr</button>
@@ -130,14 +144,59 @@
             </div>
         </div>
         <div id="right-side-panel">
-          <div id="doc-container">
-              <h2>What is this?</h2>
-              <p>TODO writing docs is the boring part.</p>
+            <div id="doc-container">
+                <h1>What is this?</h1><p>
+                Untyped lambda calculus evaluation tool, which is technically a turing complete programming language.
+                <h2>Umm, what?</h2><p>
+                For example, this is a lambda function that takes two arguments <code>a</code> and <code>b</code>, and returns the first argument <code>a</code>
+                <pre><code>
+λab.a
+                </code></pre>
+                it can be called with two parameters with parenthesis like so:
+                <pre><code>
+(λab.a parameter1 parameter2)
+                </code></pre>
+                this evaluates to
+                <pre><code>
+parameter1
+                </code></pre>
+                You can assign names to functions and expressions. This is a valid full program you can copy paste it to the left
+                <pre><code>
+parameter1 = λc.c
+parameter2 = λd.d
+in
+(λab.a parameter1 parameter2)
+                </code></pre>
+                which should evaluate to
+                <pre><code>
+λc.c
+                </code></pre>
+                <h2>Ok, and?</h2><p>
+                That's it! There is nothing more! No classes, no structs, no numbers, no booleans. Only pure lambda functions. The task here is to build everything on top of lambda functions. For example booleans can be encoded like so:
+                <pre><code>
+true = λab.a
+false = λab.b
+and = λxy.(x y false)
+in
+(and true false)
+                </code></pre>
+                Try copy-pasting it to the left, it evaluates to
+                <pre><code>
+λa.λb.b
+                </code></pre>
+                <h4>Wait why <code>λa.λb.b</code> instead of <code>λab.b</code>?</h4><p>
+                That is the same thing, it is just internal way to represent multiparameter functions. A two parameter function <code>λab</code> is the same as a single parameter function <code>λa</code> that returns a single parameter function <code>λb</code>. If you feed it two parameters, it the outcome is the same
 
-          </div>
-          <div class="image-wrapper"> <!-- New wrapper for the image -->
-              <img src="images/twi.png" alt="structure and interpretation of computer programs" id="doc-image">
-          </div>
+                <h2>Why</h2><p>
+                I saw this video and was fascinated
+                <a href="https://www.youtube.com/watch?v=RcVA8Nj6HEo">https://www.youtube.com/watch?v=RcVA8Nj6HEo</a>
+
+                <p>TODO writing more docs is the boring part.</p>
+
+            </div>
+            <div class="image-wrapper"> <!-- New wrapper for the image -->
+                <img src="images/twi.png" alt="structure and interpretation of computer programs" id="doc-image">
+            </div>
         </div>
 
 
