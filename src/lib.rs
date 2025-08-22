@@ -356,7 +356,6 @@ impl Ast {
     fn read_source_code(&mut self, source_code: &str, print: bool) {
         let mut position = 0;
         for line in source_code.split_inclusive('\n') {
-            position += line.len();
             // Remove comments
             let line = match line.find("#") {
                 Some(n) => &line[0..n],
@@ -364,12 +363,13 @@ impl Ast {
             };
             let line = line.trim();
             if line == "" {
+                position += line.len();
                 continue
             }
             let (variable_name, the_rest) = match line.find("=") {
                 Some(n) => (line[..n].trim(), line[n+1..].trim()),
                 None => {
-                    if line.trim() == "in" {
+                    if line.trim() == "in" || self.bindings.is_empty() {
                         break
                     } else {
                         panic!("Syntax error on line:\n{line}\nNo assignment \"=\" found")
@@ -380,6 +380,7 @@ impl Ast {
                 variable_name.chars().all(|c| !c.is_whitespace() && c != 'λ'),
                 "Can not assign to '{variable_name}'"
             );
+            position += line.len();
 
             if print {println!("{} =", variable_name);}
             let body = self.parse(&the_rest, print);
