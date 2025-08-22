@@ -6,7 +6,14 @@ use slotmap::Key;
 use std::collections::HashMap;
 use AstNode::{Definition, Application, Symbol};
 
+use wasm_bindgen::prelude::*;
+
 type Symbols = HashMap<CompactString, Vec<(DefaultKey, Vec<DefaultKey>)>>;
+
+#[wasm_bindgen]
+pub fn process_input(input: &str) -> String {
+    Ast::read_string_and_compute(input, true)
+}
 
 fn null() -> DefaultKey {
     DefaultKey::null()
@@ -29,29 +36,29 @@ struct Ast {
 }
 
 impl Ast {
-    fn new(print: bool) -> Ast {
-        let mut ast = Ast {t: SlotMap::new(), bindings:HashMap::new(), hat: null()};
+    // fn new(print: bool) -> Ast {
+    //     let mut ast = Ast {t: SlotMap::new(), bindings:HashMap::new(), hat: null()};
+    //
+    //     let source_code: String = std::fs::read_to_string("definitions.λ").unwrap();
+    //     ast.read_source_code(&source_code, print);
+    //
+    //     ast
+    //}
 
-        let source_code: String = std::fs::read_to_string("definitions.λ").unwrap();
-        ast.read_source_code(&source_code, print);
-
-        ast
-    }
-
-    fn read_string_and_compute(&mut self, source_code: &str, debug_parsing: bool) -> String {
+    fn read_string_and_compute(source_code: &str, debug_parsing: bool) -> String {
         let mut ast = Ast {t: SlotMap::new(), bindings:HashMap::new(), hat: null()};
         ast.read_source_code(source_code, debug_parsing);
         ast.compute_to_string()
     }
 
-    fn set(&mut self, source_code: &str, print: bool) {
-        self.remove(self.head());
-        let head = self.parse(source_code, print);
-        match self.t.get_mut(self.hat).unwrap() {
-            Definition(_, _, child) => *child = head,
-            _ => panic!(),
-        }
-    }
+    // fn set(&mut self, source_code: &str, print: bool) {
+    //     self.remove(self.head());
+    //     let head = self.parse(source_code, print);
+    //     match self.t.get_mut(self.hat).unwrap() {
+    //         Definition(_, _, child) => *child = head,
+    //         _ => panic!(),
+    //     }
+    // }
 
     fn head(&self) -> DefaultKey {
         match self.t.get(self.hat) {
@@ -60,22 +67,22 @@ impl Ast {
         }
     }
 
-    fn print(&mut self) {
-        let mut symbols = Symbols::new();
-        println!("{}", self.print_flat(self.head(), &mut symbols));
-    }
+    // fn print(&mut self) {
+    //     let mut symbols = Symbols::new();
+    //     println!("{}", self.print_flat(self.head(), &mut symbols));
+    // }
 
-    fn compute(&mut self, print: bool) {
-        for i in 0..1000000 {
-            if print {
-                print!("{:<5}", i);
-                self.print();
-            }
-            if !self.beta_reduce(self.head(), self.hat, None) {
-                break
-            }
-        }
-    }
+    // fn compute(&mut self, print: bool) {
+    //     for i in 0..1000000 {
+    //         if print {
+    //             print!("{:<5}", i);
+    //             self.print();
+    //         }
+    //         if !self.beta_reduce(self.head(), self.hat, None) {
+    //             break
+    //         }
+    //     }
+    // }
 
     fn compute_to_string(&mut self) -> String {
         use std::fmt::Write;
@@ -86,7 +93,7 @@ impl Ast {
             if !self.beta_reduce(self.head(), self.hat, None) {
                 break
             }
-            write!(&mut out, "{:<5} {}\n", i, self.print_flat(self.head(), &mut symbols));
+            write!(&mut out, "{:<5} {}\n", i, self.print_flat(self.head(), &mut symbols)).unwrap();
         }
         out
     }
@@ -412,11 +419,8 @@ impl Ast {
 
 
     fn read_source_code(&mut self, source_code: &str, print: bool) {
-        let mut lines = source_code.split_inclusive('\n');
-
         let mut position = 0;
-
-        for line in lines {
+        for line in source_code.split_inclusive('\n') {
             position += line.len();
             // Remove comments
             let line = match line.find("#") {
@@ -456,58 +460,58 @@ impl Ast {
 
 
 
-fn main() {
-    // let true_fn = "λab.a";
-    // let false_fn = "λab.b";
-    // let and_fn = format!("λxy.((x y) {false_fn})");
-    //
-    // let zero = "λzx.x";
-    // let one = "λax.(a x)";
-    // let two = "λbx.(b (b x))";
-    // let three = "λcz.(c (c (c z)))";
-    //
-    // let plus = "λnmfx.((n f) (m f x))";
-    // let times = "λnmf.(m (n f))";
-    // let exp = "λnm.(n m)";
-    //
-    // let succ = "λndx.(d (n d x))";
-    // let pred = "λnfx.(n λgh.(h (g f)) (λu.x) (λu.u))";
-    //
-    // let u = "λxy.(y (x x y))"; // Y combinator
-    // let if_0 = format!{"λn.((n λa.{false_fn}) {true_fn})"};
-    //
-    // let frac_f = format!{"λfn.({if_0} n {one} ({times} n (f ({pred} n))))"};
-    // let frac = format!{"({u} {u} {frac_f})"};
-    //λn.((n λx.λx'.(x' (x' x'))) λy.y)
-    //λn.((n λm.λx .(m  (m  x)))  λb.λx.(b (b x)))
-
-
-    let inputs = [
-        ("false", "(and true false)"),
-        ("true", "(and true true)"),
-        ("true", "(if_0 0)"),
-        ("2", "(+1 1)"),
-        ("2", "(-1 3)"),
-        ("5", "(+ 2 3)"),
-        ("6", "(* 2 3)"),
-        ("9", "(^ 2 3)"),
-        ("6", "(! 3)"),
-        ("14", "(rfold + 0 (map (^ 2) 123))"),
-        ("astrophe", "(λ x y. (y x) λ y. y)"),
-    ];
-    let print = false;
-    let mut ast = Ast::new(print);
-    ast.compute(true);
-
-    //for (name, input) in [("9", "(^ 2 3)")] {
-    // for (name, input) in [("muu", "(↑↑ 2 3)")] {
-    // //for (name, input) in inputs {
-    //     println!("{name}");
-    //     print!("input: {input}\nast: ");
-    //     ast.set(input, print);
-    //     ast.print();
-    //     ast.print();
-    //     println!("");
-    // }
-    // dbg!(ast.t.len());
-}
+// fn main() {
+//     // let true_fn = "λab.a";
+//     // let false_fn = "λab.b";
+//     // let and_fn = format!("λxy.((x y) {false_fn})");
+//     //
+//     // let zero = "λzx.x";
+//     // let one = "λax.(a x)";
+//     // let two = "λbx.(b (b x))";
+//     // let three = "λcz.(c (c (c z)))";
+//     //
+//     // let plus = "λnmfx.((n f) (m f x))";
+//     // let times = "λnmf.(m (n f))";
+//     // let exp = "λnm.(n m)";
+//     //
+//     // let succ = "λndx.(d (n d x))";
+//     // let pred = "λnfx.(n λgh.(h (g f)) (λu.x) (λu.u))";
+//     //
+//     // let u = "λxy.(y (x x y))"; // Y combinator
+//     // let if_0 = format!{"λn.((n λa.{false_fn}) {true_fn})"};
+//     //
+//     // let frac_f = format!{"λfn.({if_0} n {one} ({times} n (f ({pred} n))))"};
+//     // let frac = format!{"({u} {u} {frac_f})"};
+//     //λn.((n λx.λx'.(x' (x' x'))) λy.y)
+//     //λn.((n λm.λx .(m  (m  x)))  λb.λx.(b (b x)))
+//
+//
+//     let inputs = [
+//         ("false", "(and true false)"),
+//         ("true", "(and true true)"),
+//         ("true", "(if_0 0)"),
+//         ("2", "(+1 1)"),
+//         ("2", "(-1 3)"),
+//         ("5", "(+ 2 3)"),
+//         ("6", "(* 2 3)"),
+//         ("9", "(^ 2 3)"),
+//         ("6", "(! 3)"),
+//         ("14", "(rfold + 0 (map (^ 2) 123))"),
+//         ("astrophe", "(λ x y. (y x) λ y. y)"),
+//     ];
+//     let print = false;
+//     let mut ast = Ast::new(print);
+//     ast.compute(true);
+//
+//     //for (name, input) in [("9", "(^ 2 3)")] {
+//     // for (name, input) in [("muu", "(↑↑ 2 3)")] {
+//     // //for (name, input) in inputs {
+//     //     println!("{name}");
+//     //     print!("input: {input}\nast: ");
+//     //     ast.set(input, print);
+//     //     ast.print();
+//     //     ast.print();
+//     //     println!("");
+//     // }
+//     // dbg!(ast.t.len());
+// }
