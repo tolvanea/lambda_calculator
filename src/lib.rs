@@ -9,10 +9,12 @@ use AstNode::{Definition, Application, Symbol};
 use wasm_bindgen::prelude::*;
 
 type Symbols = HashMap<CompactString, Vec<(DefaultKey, Vec<DefaultKey>)>>;
+type Res<T> = Result<T, String>;
 
 #[wasm_bindgen]
-pub fn process_input(input: &str) -> String {
-    Ast::read_string_and_compute(input, true)
+pub fn process_input(source_code: &str, debug_parsing: bool) -> Result<String, JsError> {
+    Ast::read_string_and_compute(source_code, debug_parsing).map_err(|e| JsError::new(&e))
+
 }
 
 fn null() -> DefaultKey {
@@ -36,9 +38,9 @@ struct Ast {
 }
 
 impl Ast {
-    fn read_string_and_compute(source_code: &str, debug_parsing: bool) -> String {
+    fn read_string_and_compute(source_code: &str, debug_parsing: bool) -> Res<String> {
         let mut ast = Ast {t: SlotMap::new(), bindings:HashMap::new(), hat: null()};
-        ast.read_source_code(source_code, debug_parsing);
+        ast.read_source_code(source_code, debug_parsing)?;
         ast.compute_to_string()
     }
 
@@ -49,18 +51,18 @@ impl Ast {
         }
     }
 
-    fn compute_to_string(&mut self) -> String {
+    fn compute_to_string(&mut self) -> Res<String> {
         use std::fmt::Write;
         let mut symbols = Symbols::new();
         let mut out = format!("{:<5} {}\n", 0, self.print_flat(self.head(), &mut symbols));
         for i in 1..1000000 {
             let mut symbols = Symbols::new();
-            if !self.beta_reduce(self.head(), self.hat, None) {
+            if !self.beta_reduce(self.head(), self.hat, None)? {
                 break
             }
             write!(&mut out, "{:<5} {}\n", i, self.print_flat(self.head(), &mut symbols)).unwrap();
         }
-        out
+        Ok(out)
     }
 
     // symbols is only for counting astrophes ', and takes &mut only for internal book keeping
@@ -136,7 +138,7 @@ impl Ast {
         symbol: &CompactString,
         symbols: &mut Symbols,
         back_ref: Option<DefaultKey>
-    ) -> DefaultKey {
+    ) -> Res<DefaultKey> {
         let alloc = self.t.insert(Symbol(symbol.clone(), null()));
         let (def_node, def_symbols) = match symbols.get_mut(symbol) {
             Some(s) => { // Symbol is found from local tree (parse / deep_clone)
@@ -156,7 +158,7 @@ impl Ast {
                             self.t.remove(alloc); // Useless alloc-dealloc :/
                             return self.deep_clone(*ast, &mut HashMap::new())
                         }
-                        None => panic!("Unknown symbol '{symbol}'"),
+                        None => return Err(format!("Unknown symbol '{symbol}'")),
                     }
                 }
             }
@@ -164,12 +166,12 @@ impl Ast {
         def_symbols.push(alloc);
         match self.t.get_mut(alloc).unwrap() {
             Symbol(_, p) => {*p = def_node},
-            _ => panic!("Illegal operation")
+            _ => panic!()
         };
-        alloc
+        Ok(alloc)
     }
 
-    fn parse(&mut self, source_code: &str, print: bool) -> DefaultKey {
+    fn parse(&mut self, source_code: &str, print: bool) -> Res<DefaultKey> {
         let mut symbols = Symbols::new();
         let re = Regex::new(r"([()])|(λ\s*[^()λ\.]+)\.|([^()λ\.\s\r\n]+)").unwrap();
         let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
@@ -181,7 +183,7 @@ impl Ast {
         tokens: &mut Peekable<impl Iterator<Item = &'a str>>,
         symbols: &mut Symbols,
         indt: usize,
-    ) -> DefaultKey {
+    ) -> Res<DefaultKey> {
         let token = tokens.next().expect("Closing parenthesis missing");
         let next_char = token.chars().next().unwrap();
 
@@ -199,20 +201,20 @@ impl Ast {
                 applications.push((symbol, alloc));
             }
 
-            let mut child = self.parse_rec(tokens, symbols, indt1);
+            let mut child = self.parse_rec(tokens, symbols, indt1)?;
 
             for (symbol, alloc) in applications.iter().rev() {
                 self.collect_symbols(*alloc, child, &symbol, symbols);
                 child = *alloc;
             }
-            child
+            Ok(child)
         } else if next_char == '(' {
             if indt > 0 { println!("{}(", " ".repeat(4*indt)); }
-            let mut left = self.parse_rec(tokens, symbols, indt1);
+            let mut left = self.parse_rec(tokens, symbols, indt1)?;
             let mut arguments = Vec::new();
 
             while *tokens.peek().expect("Missing parenthesis ')'") != ")" {
-                arguments.push(self.parse_rec(tokens, symbols, indt1));
+                arguments.push(self.parse_rec(tokens, symbols, indt1)?);
             }
             let ast = if arguments.is_empty() {
                 left// Only one expression: no need to wrap it
@@ -225,13 +227,13 @@ impl Ast {
 
             if indt > 0 { println!("{})", " ".repeat(4*indt)); }
             assert_eq!(tokens.next(), Some(")"));
-            ast
+            Ok(ast)
         } else if next_char == '(' {
-            panic!("Syntax error '(' right before:\n{}", tokens.collect::<String>())
+            Err(format!("Syntax error '(' right before:\n{}", tokens.collect::<String>()))
         } else {
             let symbol: CompactString = token.into();
             if indt > 0 { println!("{}{symbol}", " ".repeat(4*indt)); }
-            self.create_leaf(&symbol, symbols, None)
+            Ok(self.create_leaf(&symbol, symbols, None)?)
         }
     }
 
@@ -240,7 +242,7 @@ impl Ast {
         node: DefaultKey,
         parent: DefaultKey,
         argument: Option<(DefaultKey, DefaultKey)>,
-    ) -> bool {
+    ) -> Res<bool> {
         match self.t.get(node).unwrap().clone() {
             Definition(_, symbols, n) => {
                 match argument {
@@ -250,7 +252,7 @@ impl Ast {
                     Some((arg, grand_parent)) => {
                         for (i, reference) in symbols.iter().enumerate() {
                             let (arg_copied, arg_addr) = if i < symbols.len() - 1 {
-                                let cloned = self.deep_clone(arg, &mut HashMap::new());
+                                let cloned = self.deep_clone(arg, &mut HashMap::new())?;
                                 (self.t.remove(cloned).unwrap(), cloned) // alloc + dealloc :/
                             } else {
                                 (self.t.remove(arg).unwrap(), arg)
@@ -292,35 +294,35 @@ impl Ast {
                         }
                         self.t.remove(node).unwrap();
                         self.t.remove(parent).unwrap();
-                        true
+                        Ok(true)
                     }
                 }
             }
             Application(t1, t2) => {
                 let parn = Some((t2, parent));
                 // Leftmost outermost reduction is guaranteed to yield beta-normal form, if exists
-                self.beta_reduce(t1, node, parn) || self.beta_reduce(t2, node, None)
+                Ok(self.beta_reduce(t1, node, parn)? || self.beta_reduce(t2, node, None)?)
             },
             Symbol(_s, _back_ref) => {
-                false
+                Ok(false)
             },
         }
     }
 
-    fn deep_clone(&mut self, key: DefaultKey, symbols: &mut Symbols) -> DefaultKey {
+    fn deep_clone(&mut self, key: DefaultKey, symbols: &mut Symbols) -> Res<DefaultKey> {
         match self.t.get(key).unwrap() {
             Definition(symbol, _, t) => {
                 let (symbol, t) = (symbol.clone(), *t); // Rust iz funy laguane
                 let alloc = self.t.insert(Definition(symbol.clone(), Vec::new(), null()));
                 symbols.entry(symbol.clone()).or_insert(Vec::new()).push((alloc, Vec::new()));
-                let child = self.deep_clone(t, symbols);
-                self.collect_symbols(alloc, child, &symbol, symbols)
+                let child = self.deep_clone(t, symbols)?;
+                Ok(self.collect_symbols(alloc, child, &symbol, symbols))
             }
             Application(t1, t2) => {
                 let (t1, t2) = (*t1, *t2);
-                let child1 = self.deep_clone(t1, symbols);
-                let child2 = self.deep_clone(t2, symbols);
-                self.t.insert(Application(child1, child2))
+                let child1 = self.deep_clone(t1, symbols)?;
+                let child2 = self.deep_clone(t2, symbols)?;
+                Ok(self.t.insert(Application(child1, child2)))
             }
             Symbol(symbol, back_ref) => {
                 self.create_leaf(&symbol.clone(), symbols, Some(*back_ref))
@@ -353,7 +355,7 @@ impl Ast {
     }
 
 
-    fn read_source_code(&mut self, source_code: &str, print: bool) {
+    fn read_source_code(&mut self, source_code: &str, print: bool) -> Res<()> {
         let mut position = 0;
         for line_raw in source_code.split_inclusive('\n') {
             // Remove comments
@@ -374,24 +376,26 @@ impl Ast {
                     } else if self.bindings.is_empty() {
                         break
                     } else {
-                        panic!("Syntax error on line:\n{line}\nNo assignment \"=\" found")
+                        return Err(format!(
+                            "Syntax error on line:\n{line}\nNo assignment \"=\" found\n"
+                        ))
                     }
                 }
             };
-            assert!(
-                variable_name.chars().all(|c| !c.is_whitespace() && c != 'λ'),
-                "Can not assign to '{variable_name}'"
-            );
+            if variable_name.chars().any(|c| c.is_whitespace() || c == 'λ') {
+                return Err(format!("Can not assign to '{variable_name}'"))
+            }
             position += line_raw.len();
 
             if print {println!("{} =", variable_name);}
-            let body = self.parse(&the_rest, print);
+            let body = self.parse(&the_rest, print)?;
             self.bindings.insert(variable_name.into(), body);
         }
 
         let last_lambda_expression = source_code[position..].trim();
-        let head = self.parse(last_lambda_expression, print);
+        let head = self.parse(last_lambda_expression, print)?;
         self.hat = self.t.insert(Definition("^".into(), Vec::new(), head));
+        Ok(())
     }
 }
 
