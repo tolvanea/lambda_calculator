@@ -5,6 +5,7 @@ use std::iter::Peekable;
 use slotmap::Key;
 use std::collections::HashMap;
 use AstNode::{Definition, Application, Symbol};
+use std::fmt::Write as _;
 
 use wasm_bindgen::prelude::*;
 
@@ -40,10 +41,11 @@ struct Ast {
 impl Ast {
     fn read_string_and_compute(source_code: &str, debug_parsing: bool) -> Res<String> {
         let mut ast = Ast {t: SlotMap::new(), bindings:HashMap::new(), hat: null()};
-        let mut debug_print = String::new();
-        ast.read_source_code(source_code, debug_parsing, &mut debug_print)?;
-        ast.compute_to_string(&mut debug_print)?;
-        Ok(debug_print)
+        let mut output = String::new();
+        ast.read_source_code(source_code, debug_parsing, &mut output)?;
+        write!(output, "\n\n").unwrap();
+        ast.compute_to_string(&mut output)?;
+        Ok(output)
     }
 
     fn head(&self) -> DefaultKey {
@@ -53,16 +55,15 @@ impl Ast {
         }
     }
 
-    fn compute_to_string(&mut self, debug_print: &mut String) -> Res<()> {
-        use std::fmt::Write;
+    fn compute_to_string(&mut self, output: &mut String) -> Res<()> {
         let mut symbols = Symbols::new();
-        write!(debug_print, "{:<5} {}\n", 0, self.print_flat(self.head(), &mut symbols)).unwrap();
+        write!(output, "{:<5} {}\n", 0, self.print_flat(self.head(), &mut symbols)).unwrap();
         for i in 1..1000000 {
             let mut symbols = Symbols::new();
-            if !self.beta_reduce(self.head(), self.hat, None)? {
+            if !self.beta_reduce(self.head(), self.hat, None, output)? {
                 break
             }
-            write!(debug_print, "{:<5} {}\n", i, self.print_flat(self.head(), &mut symbols)).unwrap();
+            write!(output, "{:<5} {}\n", i, self.print_flat(self.head(), &mut symbols)).unwrap();
         }
         Ok(())
     }
@@ -139,7 +140,8 @@ impl Ast {
         &mut self,
         symbol: &CompactString,
         symbols: &mut Symbols,
-        back_ref: Option<DefaultKey>
+        back_ref: Option<DefaultKey>,
+        output: &mut String,
     ) -> Res<DefaultKey> {
         let alloc = self.t.insert(Symbol(symbol.clone(), null()));
         let (def_node, def_symbols) = match symbols.get_mut(symbol) {
@@ -158,9 +160,16 @@ impl Ast {
                     match self.bindings.get(symbol) {
                         Some(ast) => {
                             self.t.remove(alloc); // Useless alloc-dealloc :/
-                            return self.deep_clone(*ast, &mut HashMap::new())
+                            return self.deep_clone(*ast, &mut HashMap::new(), output)
                         }
-                        None => return Err(format!("Unknown symbol '{symbol}'")),
+                        None => {
+                            write!(
+                                output,
+                                "Error: Unknown symbol '{symbol}'",
+                            ).unwrap();
+                            return Err(output.clone())
+
+                        }
                     }
                 }
             }
@@ -173,11 +182,11 @@ impl Ast {
         Ok(alloc)
     }
 
-    fn parse(&mut self, source_code: &str, print: bool, debug_print: &mut String) -> Res<DefaultKey> {
+    fn parse(&mut self, source_code: &str, print: bool, output: &mut String) -> Res<DefaultKey> {
         let mut symbols = Symbols::new();
         let re = Regex::new(r"([()])|(λ\s*[^()λ\.]+)\.|([^()λ\.\s\r\n]+)").unwrap();
         let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
-        self.parse_rec(&mut tokens, &mut symbols, print as usize, debug_print)
+        self.parse_rec(&mut tokens, &mut symbols, print as usize, output)
     }
 
     fn parse_rec<'a>(
@@ -185,9 +194,8 @@ impl Ast {
         tokens: &mut Peekable<impl Iterator<Item = &'a str>>,
         symbols: &mut Symbols,
         indt: usize,
-        debug_print: &mut String,
+        output: &mut String,
     ) -> Res<DefaultKey> {
-        use std::fmt::Write as _;
         let token = tokens.next().ok_or(format!("Closing parenthesis missing"))?;
         let next_char = token.chars().next().unwrap();
 
@@ -199,13 +207,13 @@ impl Ast {
             let mut applications = Vec::new();
             for s in params {
                 let mut symbol = CompactString::new(""); symbol.push(s); // Rust sucks,
-                if indt > 0 { write!(debug_print, "{}λ{symbol}\n", " ".repeat(4*indt)).unwrap(); }
+                if indt > 0 { write!(output, "{}λ{symbol}\n", " ".repeat(4*indt)).unwrap(); }
                 let alloc = self.t.insert(Definition(symbol.clone(), Vec::new(), null()));
                 symbols.entry(symbol.clone()).or_insert(Vec::new()).push((alloc, Vec::new()));
                 applications.push((symbol, alloc));
             }
 
-            let mut child = self.parse_rec(tokens, symbols, indt1, debug_print)?;
+            let mut child = self.parse_rec(tokens, symbols, indt1, output)?;
 
             for (symbol, alloc) in applications.iter().rev() {
                 self.collect_symbols(*alloc, child, &symbol, symbols);
@@ -213,12 +221,12 @@ impl Ast {
             }
             Ok(child)
         } else if next_char == '(' {
-            if indt > 0 { write!(debug_print, "{}(\n", " ".repeat(4*indt)).unwrap(); }
-            let mut left = self.parse_rec(tokens, symbols, indt1, debug_print)?;
+            if indt > 0 { write!(output, "{}(\n", " ".repeat(4*indt)).unwrap(); }
+            let mut left = self.parse_rec(tokens, symbols, indt1, output)?;
             let mut arguments = Vec::new();
 
             while *tokens.peek().expect("Missing parenthesis ')'") != ")" {
-                arguments.push(self.parse_rec(tokens, symbols, indt1, debug_print)?);
+                arguments.push(self.parse_rec(tokens, symbols, indt1, output)?);
             }
             let ast = if arguments.is_empty() {
                 left// Only one expression: no need to wrap it
@@ -229,15 +237,19 @@ impl Ast {
                 left
             };
 
-            if indt > 0 { write!(debug_print, "{})\n", " ".repeat(4*indt)).unwrap(); }
+            if indt > 0 { write!(output, "{})\n", " ".repeat(4*indt)).unwrap(); }
             assert_eq!(tokens.next(), Some(")"));
             Ok(ast)
         } else if next_char == '(' {
-            Err(format!("Syntax error '(' right before:\n{}", tokens.collect::<String>()))
+            write!(
+                output,
+                "Syntax error: '(' right before:\n{}", tokens.collect::<String>()
+            ).unwrap();
+            Err(output.clone())
         } else {
             let symbol: CompactString = token.into();
-            if indt > 0 { write!(debug_print, "{}{symbol}\n", " ".repeat(4*indt)).unwrap(); }
-            Ok(self.create_leaf(&symbol, symbols, None)?)
+            if indt > 0 { write!(output, "{}{symbol}\n", " ".repeat(4*indt)).unwrap(); }
+            Ok(self.create_leaf(&symbol, symbols, None, output)?)
         }
     }
 
@@ -246,17 +258,18 @@ impl Ast {
         node: DefaultKey,
         parent: DefaultKey,
         argument: Option<(DefaultKey, DefaultKey)>,
+        output: &mut String,
     ) -> Res<bool> {
         match self.t.get(node).unwrap().clone() {
             Definition(_, symbols, n) => {
                 match argument {
                     None => {
-                        self.beta_reduce(n, node, None)
+                        self.beta_reduce(n, node, None, output)
                     }
                     Some((arg, grand_parent)) => {
                         for (i, reference) in symbols.iter().enumerate() {
                             let (arg_copied, arg_addr) = if i < symbols.len() - 1 {
-                                let cloned = self.deep_clone(arg, &mut HashMap::new())?;
+                                let cloned = self.deep_clone(arg, &mut HashMap::new(), output)?;
                                 (self.t.remove(cloned).unwrap(), cloned) // alloc + dealloc :/
                             } else {
                                 (self.t.remove(arg).unwrap(), arg)
@@ -305,7 +318,8 @@ impl Ast {
             Application(t1, t2) => {
                 let parn = Some((t2, parent));
                 // Leftmost outermost reduction is guaranteed to yield beta-normal form, if exists
-                Ok(self.beta_reduce(t1, node, parn)? || self.beta_reduce(t2, node, None)?)
+                let left = self.beta_reduce(t1, node, parn, output)?;
+                Ok(left || self.beta_reduce(t2, node, None, output)?)
             },
             Symbol(_s, _back_ref) => {
                 Ok(false)
@@ -313,23 +327,23 @@ impl Ast {
         }
     }
 
-    fn deep_clone(&mut self, key: DefaultKey, symbols: &mut Symbols) -> Res<DefaultKey> {
+    fn deep_clone(&mut self, key: DefaultKey, symbols: &mut Symbols, output: &mut String) -> Res<DefaultKey> {
         match self.t.get(key).unwrap() {
             Definition(symbol, _, t) => {
                 let (symbol, t) = (symbol.clone(), *t); // Rust iz funy laguane
                 let alloc = self.t.insert(Definition(symbol.clone(), Vec::new(), null()));
                 symbols.entry(symbol.clone()).or_insert(Vec::new()).push((alloc, Vec::new()));
-                let child = self.deep_clone(t, symbols)?;
+                let child = self.deep_clone(t, symbols, output)?;
                 Ok(self.collect_symbols(alloc, child, &symbol, symbols))
             }
             Application(t1, t2) => {
                 let (t1, t2) = (*t1, *t2);
-                let child1 = self.deep_clone(t1, symbols)?;
-                let child2 = self.deep_clone(t2, symbols)?;
+                let child1 = self.deep_clone(t1, symbols, output)?;
+                let child2 = self.deep_clone(t2, symbols, output)?;
                 Ok(self.t.insert(Application(child1, child2)))
             }
             Symbol(symbol, back_ref) => {
-                self.create_leaf(&symbol.clone(), symbols, Some(*back_ref))
+                self.create_leaf(&symbol.clone(), symbols, Some(*back_ref), output)
             }
         }
     }
@@ -359,9 +373,8 @@ impl Ast {
     }
 
 
-    fn read_source_code(&mut self, source_code: &str, print: bool, debug_print: &mut String) -> Res<()> {
+    fn read_source_code(&mut self, source_code: &str, print: bool, output: &mut String) -> Res<()> {
         let mut position = 0;
-        use std::fmt::Write as _;
 
         for line_raw in source_code.split_inclusive('\n') {
             // Remove comments
@@ -382,25 +395,28 @@ impl Ast {
                     } else if self.bindings.is_empty() {
                         break
                     } else {
-                        return Err(format!(
+                        write!(
+                            output,
                             "Syntax error on line:\n{line}\nNo assignment \"=\" found\n"
-                        ))
+                        ).unwrap();
+                        return Err(output.clone())
                     }
                 }
             };
             if variable_name.chars().any(|c| c.is_whitespace() || c == 'λ') {
-                return Err(format!("Can not assign to '{variable_name}'"))
+                write!(output, "Error: Can not assign to '{variable_name}'").unwrap();
+                return Err(output.clone())
             }
             position += line_raw.len();
 
 
-            if print {write!(debug_print, "{} =\n", variable_name).unwrap();}
-            let body = self.parse(&the_rest, print, debug_print)?;
+            if print {write!(output, "{} =\n", variable_name).unwrap();}
+            let body = self.parse(&the_rest, print, output)?;
             self.bindings.insert(variable_name.into(), body);
         }
 
         let last_lambda_expression = source_code[position..].trim();
-        let head = self.parse(last_lambda_expression, print, debug_print)?;
+        let head = self.parse(last_lambda_expression, print, output)?;
         self.hat = self.t.insert(Definition("^".into(), Vec::new(), head));
         Ok(())
     }
