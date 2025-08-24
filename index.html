@@ -50,7 +50,7 @@
                 justify-content: center; /* Center the image horizontally */
                 width: 100%; /* Full width of the container */
                 margin-top: auto; /* Push the image to the bottom of the container */
-                height: 30vh;
+                height: 28vh;
             }
 
             #input-container {
@@ -58,7 +58,7 @@
                 flex-direction: column;
                 justify-content: center; /* Center content vertically */
                 align-items: center;
-                padding: 20px; /* Add padding */
+                padding: 40px; /* Add padding */
                 height: 50vh;
             }
 
@@ -95,6 +95,7 @@
                 width: 100%; /* Full width */
                 resize: none; /* Prevent resizing */
                 padding: 20px; /* Add padding */
+                background-color: #f9f9f9; /* Light background color */
                 border: 1px solid #ccc; /* Add a border */
                 border-radius: 4px; /* Rounded corners */
             }
@@ -132,12 +133,15 @@
     </head>
     <body>
         <div id="main-container">
-            <h1>Lambda calculator</h1>
+            <h1 style="text-align: center;">Lambda calculator</h1>
             <div id="input-container">
                 <textarea id="input" placeholder="Type the lambda expression here" rows="5" style="flex: 1; width: 100%;"></textarea>
             </div>
             <div id="how-the-fuck-i-center-a-div">
-              <button id="compile">go brrrrrrrrr</button>
+                <button id="compile">go brrrrrrrrr</button>
+                <label>
+                    <input type="checkbox" id="debug_parse" checked> Debug parse
+                </label>
             </div>
             <div id="output-container">
                 <div id="output" aria-label="Output will appear here..."></div>
@@ -175,14 +179,57 @@ in
                 That is the same thing, it is just internal way to represent multiparameter functions. A two parameter function <code>λab</code> is the same as a single parameter function <code>λa</code> that returns a single parameter function <code>λb</code>. If you feed it two parameters, it the outcome is the same
 
                 <h2>Why</h2><p>
-                I saw this video and was fascinated
+                Saw this video and was fascinated
                 <a href="https://www.youtube.com/watch?v=RcVA8Nj6HEo">https://www.youtube.com/watch?v=RcVA8Nj6HEo</a>
+
+                <h2>Standard library</h2><p>
+                Copy paste whatever you need from here
+                <pre><code>true = λab.a
+false = λab.b
+and = λxy.(x y false)
+
+# Numbers
+0 = λzx.x
+1 = λax.(a x)
+2 = λbx.(b (b x))
+3 = λcz.(c (c (c z)))
++1 = λndx.(d (n d x))
+-1 = λnfx.(n λgh.(h (g f)) (λu.x) (λu.u))
+
+# Arithmetic
++ = λnmfx.((n f) (m f x))
+* = λnmf.(m (n f))
+^ = λnm.(n m)
+- = λmn.n -1 m
+↑↑ = λmn.((-1 n) (^ m) m)
+
+# Pairs
+pair = λxyf.(f x y)
+nil = false
+fst = λl.(l λhtd.h nil)
+snd = λl.(l λhtd.t nil)
+is_nill = λl.(l λhtd.false true)
+
+# Example list [1, 2, 3]
+123 = (pair 1 (pair 2 (pair 3 nil)))
+
+# Recursion magic
+u = λxy.(y (x x y))
+Y = (u u) # Y combinator
+
+if_0 = λn.((n λa.false) true)
+
+frac = λfn.(if_0 n 1 (* n (f (-1 n))))
+! = (u u frac)
+
+rfold = λfa.(Y (λrl.(l λhtd.(f (r t) h) a)))
+map = λf.(rfold (λah.(pair (f h) a)) nil)</code></pre>
 
                 <p>TODO writing more docs is the boring part.</p>
 
             </div>
             <div class="image-wrapper"> <!-- New wrapper for the image -->
-                <img src="images/twi.png" alt="structure and interpretation of computer programs" id="doc-image">
+                <img id="pony" src="images/twi.png" alt="structure and interpretation of computer programs" id="doc-image">
             </div>
         </div>
 
@@ -194,8 +241,21 @@ in
                 await init();
                 document.getElementById('compile').onclick = () => {
                     const input = document.getElementById('input').value;
-                    const output = process_input(input);
-                    document.getElementById('output').textContent = output;
+                    const checkbox = document.getElementById('debug_parse');
+                    const img = document.getElementById('pony');
+                    console.log("checkbox:", checkbox.checked);
+
+                    try {
+                        console.log("Trying");
+                        const output = process_input(input, checkbox.checked);
+                        document.getElementById('output').textContent = output;
+                        img.src = 'images/twi.png';
+                    } catch (error) {
+                        console.log("Tried");
+                        document.getElementById('output').textContent = error;
+                        console.error("Error:", error);
+                        img.src = 'images/ponka.png';
+                    }
                 };
             }
             run();

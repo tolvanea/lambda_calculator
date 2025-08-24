@@ -40,8 +40,10 @@ struct Ast {
 impl Ast {
     fn read_string_and_compute(source_code: &str, debug_parsing: bool) -> Res<String> {
         let mut ast = Ast {t: SlotMap::new(), bindings:HashMap::new(), hat: null()};
-        ast.read_source_code(source_code, debug_parsing)?;
-        ast.compute_to_string()
+        let mut debug_print = String::new();
+        ast.read_source_code(source_code, debug_parsing, &mut debug_print)?;
+        ast.compute_to_string(&mut debug_print)?;
+        Ok(debug_print)
     }
 
     fn head(&self) -> DefaultKey {
@@ -51,18 +53,18 @@ impl Ast {
         }
     }
 
-    fn compute_to_string(&mut self) -> Res<String> {
+    fn compute_to_string(&mut self, debug_print: &mut String) -> Res<()> {
         use std::fmt::Write;
         let mut symbols = Symbols::new();
-        let mut out = format!("{:<5} {}\n", 0, self.print_flat(self.head(), &mut symbols));
+        write!(debug_print, "{:<5} {}\n", 0, self.print_flat(self.head(), &mut symbols)).unwrap();
         for i in 1..1000000 {
             let mut symbols = Symbols::new();
             if !self.beta_reduce(self.head(), self.hat, None)? {
                 break
             }
-            write!(&mut out, "{:<5} {}\n", i, self.print_flat(self.head(), &mut symbols)).unwrap();
+            write!(debug_print, "{:<5} {}\n", i, self.print_flat(self.head(), &mut symbols)).unwrap();
         }
-        Ok(out)
+        Ok(())
     }
 
     // symbols is only for counting astrophes ', and takes &mut only for internal book keeping
@@ -171,11 +173,11 @@ impl Ast {
         Ok(alloc)
     }
 
-    fn parse(&mut self, source_code: &str, print: bool) -> Res<DefaultKey> {
+    fn parse(&mut self, source_code: &str, print: bool, debug_print: &mut String) -> Res<DefaultKey> {
         let mut symbols = Symbols::new();
         let re = Regex::new(r"([()])|(λ\s*[^()λ\.]+)\.|([^()λ\.\s\r\n]+)").unwrap();
         let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
-        self.parse_rec(&mut tokens, &mut symbols, print as usize)
+        self.parse_rec(&mut tokens, &mut symbols, print as usize, debug_print)
     }
 
     fn parse_rec<'a>(
@@ -183,8 +185,10 @@ impl Ast {
         tokens: &mut Peekable<impl Iterator<Item = &'a str>>,
         symbols: &mut Symbols,
         indt: usize,
+        debug_print: &mut String,
     ) -> Res<DefaultKey> {
-        let token = tokens.next().expect("Closing parenthesis missing");
+        use std::fmt::Write as _;
+        let token = tokens.next().ok_or(format!("Closing parenthesis missing"))?;
         let next_char = token.chars().next().unwrap();
 
         let indt1 = if indt == 0 { 0 } else { indt+1 };
@@ -195,13 +199,13 @@ impl Ast {
             let mut applications = Vec::new();
             for s in params {
                 let mut symbol = CompactString::new(""); symbol.push(s); // Rust sucks,
-                if indt > 0 { println!("{}λ{symbol}", " ".repeat(4*indt)); }
+                if indt > 0 { write!(debug_print, "{}λ{symbol}\n", " ".repeat(4*indt)).unwrap(); }
                 let alloc = self.t.insert(Definition(symbol.clone(), Vec::new(), null()));
                 symbols.entry(symbol.clone()).or_insert(Vec::new()).push((alloc, Vec::new()));
                 applications.push((symbol, alloc));
             }
 
-            let mut child = self.parse_rec(tokens, symbols, indt1)?;
+            let mut child = self.parse_rec(tokens, symbols, indt1, debug_print)?;
 
             for (symbol, alloc) in applications.iter().rev() {
                 self.collect_symbols(*alloc, child, &symbol, symbols);
@@ -209,12 +213,12 @@ impl Ast {
             }
             Ok(child)
         } else if next_char == '(' {
-            if indt > 0 { println!("{}(", " ".repeat(4*indt)); }
-            let mut left = self.parse_rec(tokens, symbols, indt1)?;
+            if indt > 0 { write!(debug_print, "{}(\n", " ".repeat(4*indt)).unwrap(); }
+            let mut left = self.parse_rec(tokens, symbols, indt1, debug_print)?;
             let mut arguments = Vec::new();
 
             while *tokens.peek().expect("Missing parenthesis ')'") != ")" {
-                arguments.push(self.parse_rec(tokens, symbols, indt1)?);
+                arguments.push(self.parse_rec(tokens, symbols, indt1, debug_print)?);
             }
             let ast = if arguments.is_empty() {
                 left// Only one expression: no need to wrap it
@@ -225,14 +229,14 @@ impl Ast {
                 left
             };
 
-            if indt > 0 { println!("{})", " ".repeat(4*indt)); }
+            if indt > 0 { write!(debug_print, "{})\n", " ".repeat(4*indt)).unwrap(); }
             assert_eq!(tokens.next(), Some(")"));
             Ok(ast)
         } else if next_char == '(' {
             Err(format!("Syntax error '(' right before:\n{}", tokens.collect::<String>()))
         } else {
             let symbol: CompactString = token.into();
-            if indt > 0 { println!("{}{symbol}", " ".repeat(4*indt)); }
+            if indt > 0 { write!(debug_print, "{}{symbol}\n", " ".repeat(4*indt)).unwrap(); }
             Ok(self.create_leaf(&symbol, symbols, None)?)
         }
     }
@@ -355,8 +359,10 @@ impl Ast {
     }
 
 
-    fn read_source_code(&mut self, source_code: &str, print: bool) -> Res<()> {
+    fn read_source_code(&mut self, source_code: &str, print: bool, debug_print: &mut String) -> Res<()> {
         let mut position = 0;
+        use std::fmt::Write as _;
+
         for line_raw in source_code.split_inclusive('\n') {
             // Remove comments
             let line = match line_raw.find("#") {
@@ -387,13 +393,14 @@ impl Ast {
             }
             position += line_raw.len();
 
-            if print {println!("{} =", variable_name);}
-            let body = self.parse(&the_rest, print)?;
+
+            if print {write!(debug_print, "{} =\n", variable_name).unwrap();}
+            let body = self.parse(&the_rest, print, debug_print)?;
             self.bindings.insert(variable_name.into(), body);
         }
 
         let last_lambda_expression = source_code[position..].trim();
-        let head = self.parse(last_lambda_expression, print)?;
+        let head = self.parse(last_lambda_expression, print, debug_print)?;
         self.hat = self.t.insert(Definition("^".into(), Vec::new(), head));
         Ok(())
     }
@@ -401,10 +408,21 @@ impl Ast {
 
 #[test]
 fn test() {
-    let inn = "AA = λab.a\n
-BB = λab.b\n
-and = λxy.(x y BB)\n
+    let inn = "
+true = λab.a\n
+false = λab.b\n
+1 = λax.(a x)\n
+3 = λcz.(c (c (c z)))\n
+-1 = λnfx.(n λgh.(h (g f)) (λu.x) (λu.u))\n
+* = λnmf.(m (n f))\n
+\n
+u = λxy.(y (x x y))\n
+Y = (u u) # Y combinator\n
+\n
+if_0 = λn.((n λa.false) true)\n
+frac = λfn.(if_0 n 1 (* n (f (-1 n))))\n
+! = (Y frac)\n
 in\n
-(and AA BB)".to_string();
-    Ast::read_string_and_compute(&inn, true);
+(! 3)".to_string();
+    Ast::read_string_and_compute(&inn, false).unwrap();
 }
