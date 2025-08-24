@@ -10,6 +10,7 @@
                 height: 98vh; /* Full height of the viewport */
                 width: 99vw; /* Full height of the viewport */
                 margin: 0; /* Remove default margin */
+                font-family: 'Arial', sans-serif;
             }
 
             #main-container {
@@ -135,12 +136,12 @@
         <div id="main-container">
             <h1 style="text-align: center;">Lambda calculator</h1>
             <div id="input-container">
-                <textarea id="input" placeholder="Type the lambda expression here" rows="5" style="flex: 1; width: 100%;"></textarea>
+                <textarea id="input" placeholder="Type the code here" rows="5" style="flex: 1; width: 100%;"></textarea>
             </div>
             <div id="how-the-fuck-i-center-a-div">
                 <button id="compile">go brrrrrrrrr</button>
                 <label>
-                    <input type="checkbox" id="debug_parse" checked> Debug parse
+                    <input type="checkbox" id="debug_parse" style="margin-left: 30px" checked> Debug parsing
                 </label>
             </div>
             <div id="output-container">
@@ -150,24 +151,34 @@
         <div id="right-side-panel">
             <div id="doc-container">
                 <h1>What is this?</h1><p>
-                Untyped lambda calculus evaluation tool. It happens to be also a turing complete programming language.
+                Untyped lambda calculus evaluation tool. It happens to also be a turing complete programming language.
                 <h2>Umm, what?</h2><p>
-                For example, this is a lambda function that takes two arguments <code>a</code> and <code>b</code>, and returns the first argument <code>a</code>
-                <pre><code>λab.a</code></pre>
-                it can be called with two parameters with parenthesis like so:
-                <pre><code>(λab.a parameter1 parameter2)</code></pre>
-                this evaluates to
-                <pre><code>parameter1</code></pre>
-                You can assign names to functions and expressions. This is a valid full program you can copy paste it to the left
+                This is a lambda <b><i>function definition</i></b>
+                <pre><code>λab.a</code></pre><p>
+
+                It takes two parameters <code>a</code> and <code>b</code>, and returns the first parameter <code>a</code>.
+                <p>
+                <b><i>Evaluation</i></b> of a lambda function is made by putting it inside the parenthesis with the arguments:
+                <pre><code>(λab.a parameter1 parameter2)</code></pre><p>
+                So instead of the common function call notation <code>f(a, b)</code>, it is <code>(f a b)</code>. Well anyways, in this case the function returns the first argument, so it would evaluate to <code>parameter1</code>.
+                <p>
+                The <code>parameter1</code> is some expression, which is either of the above. That is, it is either
+                <ul>
+                    <li>function definition <code>λ...</code>, or</li>
+                    <li>function evaluation <code>(...)</code></li>
+                </ul>
+
+                <p>
+                For example, this is a valid program you can insert to left
                 <pre><code>parameter1 = λc.c
 parameter2 = λd.d
 in
 (λab.a parameter1 parameter2)</code></pre>
-                which should evaluate to
+                which evaluates to
                 <pre><code>λc.c</code></pre>
 
                 <h2>Ok, and?</h2><p>
-                That's it! There is nothing more! No classes, no structs, no numbers, no booleans. Only pure lambda functions. The task here is to build everything on top of lambda functions. For example booleans can be encoded like so:
+                That's it! There is nothing more! No classes, no numbers, no booleans. Only pure lambda functions. The task here is to build everything from bottom up starting from lambda functions. For example, a boolean calculation "FALSE AND TRUE" can be encoded like so:
                 <pre><code>true = λab.a
 false = λab.b
 and = λxy.(x y false)
@@ -176,56 +187,63 @@ in
                 Try copy-pasting it to the left, it evaluates to
                 <pre><code>λa.λb.b</code></pre>
                 <h4>Wait why <code>λa.λb.b</code> instead of <code>λab.b</code>?</h4><p>
-                That is the same thing, it is just internal way to represent multiparameter functions. A two parameter function <code>λab</code> is the same as a single parameter function <code>λa</code> that returns a single parameter function <code>λb</code>. If you feed it two parameters, it the outcome is the same
+                Because it's internal representation of lambda calculus, and it does not have multiparameter functions. A two parameter function <code>λab</code> is actually just a syntax sugar to a single parameter function <code>λa</code> that returns a single parameter function <code>λb</code>. You can feed two parameters in and it works as if it was a two parameter function.
 
-                <h2>Why</h2><p>
-                Saw this video and was fascinated
+                <h2>But whyyyyyy?</h2><p>
+                You can formulate every computation on functions! No values required!
+                It's like <a href="https://nandgame.com/">nand-game</a> but from a mathematical perspective.
+                I was inspired by this video, see it, it's awesome:
+                <p>
                 <a href="https://www.youtube.com/watch?v=RcVA8Nj6HEo">https://www.youtube.com/watch?v=RcVA8Nj6HEo</a>
 
                 <h2>Standard library</h2><p>
-                Copy paste whatever you need from here
+                Copy paste whatever fragments you need from here.
+
+
                 <pre><code>true = λab.a
 false = λab.b
 and = λxy.(x y false)
 
-# Numbers
-0 = λzx.x
-1 = λax.(a x)
-2 = λbx.(b (b x))
-3 = λcz.(c (c (c z)))
-+1 = λndx.(d (n d x))
+# Numbers encoded as recursive function calls
+0 = λfx.x
+1 = λfx.(f x)
+2 = λfx.(f (f x))
+3 = λfx.(f (f (f x)))
+4 = λfx.(f (f (f (f x))))
++1 = λnfx.(f (n f x))
 -1 = λnfx.(n λgh.(h (g f)) (λu.x) (λu.u))
 
 # Arithmetic
 + = λnmfx.((n f) (m f x))
 * = λnmf.(m (n f))
-^ = λnm.(n m)
 - = λmn.n -1 m
+^ = λnm.(m n)
 ↑↑ = λmn.((-1 n) (^ m) m)
 
-# Pairs
+# Pairs: x=first, y= second, h=head, t=tail
 pair = λxyf.(f x y)
 nil = false
 fst = λl.(l λhtd.h nil)
 snd = λl.(l λhtd.t nil)
 is_nill = λl.(l λhtd.false true)
 
-# Example list [1, 2, 3]
-123 = (pair 1 (pair 2 (pair 3 nil)))
-
-# Recursion magic
+# Recursion with Y-combinator
 u = λxy.(y (x x y))
-Y = (u u) # Y combinator
+Y = (u u)
 
+# Factorial, e.g. (! 3) = 3*2*1 = 6
 if_0 = λn.((n λa.false) true)
+factorial = λfn.(if_0 n 1 (* n (f (-1 n))))
+! = (u u factorial)
 
-frac = λfn.(if_0 n 1 (* n (f (-1 n))))
-! = (u u frac)
-
+# List processing, e.g.
+# (rfold + 0 (map (^ 2) [1,2,3])) = 1+4+9
 rfold = λfa.(Y (λrl.(l λhtd.(f (r t) h) a)))
-map = λf.(rfold (λah.(pair (f h) a)) nil)</code></pre>
-
-                <p>TODO writing more docs is the boring part.</p>
+map = λf.(rfold (λah.(pair (f h) a)) nil)
+[1,2,3] = (pair 1 (pair 2 (pair 3 nil)))
+</code></pre>
+                <p>
+                Also see the <a href="https://en.wikipedia.org/wiki/Lambda_calculus#Encoding_datatypes">wikipedia page</a>.
 
             </div>
             <div class="image-wrapper"> <!-- New wrapper for the image -->
@@ -241,19 +259,20 @@ map = λf.(rfold (λah.(pair (f h) a)) nil)</code></pre>
                 await init();
                 document.getElementById('compile').onclick = () => {
                     const input = document.getElementById('input').value;
+                    const outputBox = document.getElementById('output')
+
+
                     const checkbox = document.getElementById('debug_parse');
                     const img = document.getElementById('pony');
-                    console.log("checkbox:", checkbox.checked);
 
                     try {
-                        console.log("Trying");
                         const output = process_input(input, checkbox.checked);
-                        document.getElementById('output').textContent = output;
+                        outputBox.textContent = output;
+                        outputBox.style.backgroundColor = "#f9f9f9";
                         img.src = 'images/twi.png';
                     } catch (error) {
-                        console.log("Tried");
-                        document.getElementById('output').textContent = error;
-                        console.error("Error:", error);
+                        outputBox.textContent = error;
+                        outputBox.style.backgroundColor = "#fff8f8";
                         img.src = 'images/ponka.png';
                     }
                 };
