@@ -193,7 +193,17 @@ impl Ast {
         let mut symbols = Symbols::new();
         let re = Regex::new(r"([()])|(λ\s*[^()λ\.]+)\.|([^()λ\.\s\r\n]+)").unwrap();
         let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
-        self.parse_rec(&mut tokens, &mut symbols, print as usize, output)
+        let parsed = self.parse_rec(&mut tokens, &mut symbols, print as usize, output)?;
+        if let Some(tok) = tokens.next() {
+            write!(
+                output,
+                "Error: Unexpected token '{tok}':\n\
+                There is more than one expression in the final statement.\n\
+                If you tried to make an evaluation, wrap it around parenthesis.\n"
+            ).unwrap();
+            return Err(())
+        }
+        Ok(parsed)
     }
 
     fn parse_rec<'a>(
