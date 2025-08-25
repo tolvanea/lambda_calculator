@@ -82,14 +82,24 @@ impl Ast {
     fn compute_to_string(&mut self, output: &mut String) -> Res<()> {
         let mut symbols = Symbols::new();
         write!(output, "{:<5} {}\n", 0, self.print_flat(self.head(), &mut symbols)).unwrap();
-        for i in 1..1000000 {
+        let mut counter = 1;
+        let succ = loop  {
             let mut symbols = Symbols::new();
             if !self.beta_reduce(self.head(), self.hat, None, output)? {
-                break
+                break true
             }
-            write!(output, "{:<5} {}\n", i, self.print_flat(self.head(), &mut symbols)).unwrap();
+            write!(output, "{:<5} {}\n", counter, self.print_flat(self.head(), &mut symbols)).unwrap();
+            if counter >= 200000 || self.t.len() > 20000 {
+                break false
+            }
+            counter += 1;
+        };
+        if succ {
+            Ok(())
+        } else {
+            write!(output, "The program does not seem to halt, terminating it\n").unwrap();
+            Err(())
         }
-        Ok(())
     }
 
     // symbols is only for counting astrophes ', and takes &mut only for internal book keeping
@@ -479,5 +489,5 @@ frac = λfn.(if_0 n 1 (* n (f (-1 n))))\n
 ! = (Y frac)\n
 in\n
 (! 3)".to_string();
-    Ast::read_string_and_compute(&inn, false).unwrap();
+    process_input(&inn, true).unwrap();
 }
