@@ -159,26 +159,27 @@
                 It takes two parameters <code>a</code> and <code>b</code>, and returns the first parameter <code>a</code>.
                 <p>
                 <b><i>Evaluation</i></b> of a lambda function is made by putting it inside the parenthesis with the arguments:
-                <pre><code>(λab.a parameter1 parameter2)</code></pre><p>
-                So instead of the common function call notation <code>f(a, b)</code>, it is <code>(f a b)</code>. Well anyways, in this case the function returns the first argument, so it would evaluate to <code>parameter1</code>.
+                <pre><code>(λab.a argument1 argument2)</code></pre><p>
+                So instead of the common function call notation <code>f(a, b)</code>, it is <code>(f a b)</code>. Well anyways, in this case the function returns the first parameter, so it would evaluate to <code>argument1</code>.
                 <p>
-                The <code>parameter1</code> is some expression, which is either of the above. That is, it is either
+                Here the <code>argument1</code> and <code>argument2</code> are some expressions. An expression is either of the above:
                 <ul>
                     <li>function definition <code>λ...</code>, or</li>
                     <li>function evaluation <code>(...)</code></li>
                 </ul>
 
                 <p>
-                For example, this is a valid program you can insert to left
-                <pre><code>parameter1 = λc.c
-parameter2 = λd.d
+                The program consists of the assignments, a keyword <code>in</code>, and one expression.
+                For example, this is a valid program you can insert to the left
+                <pre><code>argument1 = λc.c
+argument2 = λd.d
 in
-(λab.a parameter1 parameter2)</code></pre>
-                which evaluates to
+(λab.a argument1 argument2)</code></pre>
+                It evaluates to
                 <pre><code>λc.c</code></pre>
 
                 <h2>Ok, and?</h2><p>
-                That's it! There is nothing more! No classes, no numbers, no booleans. Only pure lambda functions. The task here is to build everything from bottom up starting from lambda functions. For example, a boolean calculation "FALSE AND TRUE" can be encoded like so:
+                That's it! There is nothing more! No classes, no numbers, no booleans. Only pure lambda functions. The task here is to build everything from bottom up, starting from lambda functions. For example, a boolean calculation "FALSE AND TRUE" can be encoded like so:
                 <pre><code>true = λab.a
 false = λab.b
 and = λxy.(x y false)
@@ -187,18 +188,17 @@ in
                 Try copy-pasting it to the left, it evaluates to
                 <pre><code>λa.λb.b</code></pre>
                 <h4>Wait why <code>λa.λb.b</code> instead of <code>λab.b</code>?</h4><p>
-                Because it's internal representation of lambda calculus, and it does not have multiparameter functions. A two parameter function <code>λab</code> is actually just a syntax sugar to a single parameter function <code>λa</code> that returns a single parameter function <code>λb</code>. You can feed two parameters in and it works as if it was a two parameter function.
+                Because that is internal representation of lambda calculus, as lambda calculus does not have multiparameter functions. A two parameter function <code>λab</code> is actually just a syntax sugar to a single parameter function <code>λa</code> that returns a single parameter function <code>λb</code>. You can feed two arguments in and it works as if it was a two parameter function.
 
-                <h2>But whyyyyyy?</h2><p>
-                You can formulate every computation on functions! No values required!
-                It's like <a href="https://nandgame.com/">nand-game</a> but with functions instead of nand-gates.
+                <h2>But why?</h2><p>
+                All of computation can be formulated on top of functions! No values required!
+                It's like <a href="https://nandgame.com/">nand-game</a> but with functions.
                 I was inspired by this video, see it, it's awesome:
                 <p>
                 <a href="https://www.youtube.com/watch?v=RcVA8Nj6HEo">https://www.youtube.com/watch?v=RcVA8Nj6HEo</a>
 
                 <h2>Standard library</h2><p>
-                Copy paste whatever fragments you need from here.
-
+                Copy paste whatever fragments you need from here. Also see the <a href="https://en.wikipedia.org/wiki/Lambda_calculus#Encoding_datatypes">wikipedia page</a>.
 
                 <pre><code>true = λab.a
 false = λab.b
@@ -231,19 +231,31 @@ is_nill = λl.(l λhtd.false true)
 u = λxy.(y (x x y))
 Y = (u u)
 
-# Factorial, e.g. (! 3) = 3*2*1 = 6
+# Factorial
 if_0 = λn.((n λa.false) true)
 factorial = λfn.(if_0 n 1 (* n (f (-1 n))))
 ! = (u u factorial)
 
-# List processing, e.g.
-# (rfold + 0 (map (^ 2) [1,2,3])) = 1+4+9
+# List processing
 rfold = λfa.(Y (λrl.(l λhtd.(f (r t) h) a)))
 map = λf.(rfold (λah.(pair (f h) a)) nil)
 [1,2,3] = (pair 1 (pair 2 (pair 3 nil)))
 </code></pre>
-                <p>
-                Also see the <a href="https://en.wikipedia.org/wiki/Lambda_calculus#Encoding_datatypes">wikipedia page</a>.
+
+                <h2>Examples</h2><p>
+                Using the definitions in our "standard library" above, following expression can be calculated, as an example.
+                <pre><code># 1 + 1 = 2
+(+ 1 1)
+
+# 2^2^2 = 16
+(↑↑ 2 3)
+
+# 3! = 3 * 2 * 1 = 6
+(! 3)
+
+# 1^2 + 2^2 + 3^2 = 14
+(rfold + 0 (map (^ 2) [1,2,3]))
+</code></pre>
 
             </div>
             <div class="image-wrapper"> <!-- New wrapper for the image -->
