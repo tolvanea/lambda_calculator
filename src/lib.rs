@@ -10,7 +10,7 @@ use std::fmt::Write as _;
 use wasm_bindgen::prelude::*;
 
 type Symbols = HashMap<CompactString, Vec<(DefaultKey, Vec<DefaultKey>)>>;
-type Res<T> = Result<T, String>;
+type Res<T> = Result<T, ()>;
 
 #[wasm_bindgen]
 pub fn process_input(source_code: &str, debug_parsing: bool) -> Result<String, JsError> {
@@ -39,13 +39,21 @@ struct Ast {
 }
 
 impl Ast {
-    fn read_string_and_compute(source_code: &str, debug_parsing: bool) -> Res<String> {
+    fn read_string_and_compute(source_code: &str, debug_parsing: bool) -> Result<String, String> {
         let mut ast = Ast {t: SlotMap::new(), bindings:HashMap::new(), hat: null()};
         let mut output = String::new();
-        ast.read_source_code(source_code, debug_parsing, &mut output)?;
-        write!(output, "\n\n").unwrap();
-        ast.compute_to_string(&mut output)?;
-        Ok(output)
+        match ast.read_source_code(source_code, debug_parsing, &mut output) {
+            Ok(_) => {
+                write!(output, "\n\n").unwrap();
+                match ast.compute_to_string(&mut output) {
+                    Ok(_) => Ok(output),
+                    Err(_) => Err(output),
+                }
+            }
+            Err(_) => {
+                Err(output)
+            }
+        }
     }
 
     fn head(&self) -> DefaultKey {
@@ -165,10 +173,9 @@ impl Ast {
                         None => {
                             write!(
                                 output,
-                                "Error: Unknown symbol '{symbol}'",
+                                "Error: Unknown symbol '{symbol}'\n",
                             ).unwrap();
-                            return Err(output.clone())
-
+                            return Err(())
                         }
                     }
                 }
@@ -196,7 +203,8 @@ impl Ast {
         indt: usize,
         output: &mut String,
     ) -> Res<DefaultKey> {
-        let token = tokens.next().ok_or(format!("Closing parenthesis missing"))?;
+        let token = tokens.next()
+            .ok_or_else(|| write!(output, "Closing parenthesis missing").unwrap())?;
         let next_char = token.chars().next().unwrap();
 
         let indt1 = if indt == 0 { 0 } else { indt+1 };
@@ -245,11 +253,11 @@ impl Ast {
                 output,
                 "Syntax error: '(' right before:\n{}", tokens.collect::<String>()
             ).unwrap();
-            Err(output.clone())
+            Err(())
         } else {
             let symbol: CompactString = token.into();
             if indt > 0 { write!(output, "{}{symbol}\n", " ".repeat(4*indt)).unwrap(); }
-            Ok(self.create_leaf(&symbol, symbols, None, output)?)
+            self.create_leaf(&symbol, symbols, None, output)
         }
     }
 
@@ -399,13 +407,13 @@ impl Ast {
                             output,
                             "Syntax error on line:\n{line}\nNo assignment \"=\" found\n"
                         ).unwrap();
-                        return Err(output.clone())
+                        return Err(())
                     }
                 }
             };
             if variable_name.chars().any(|c| c.is_whitespace() || c == 'λ') {
-                write!(output, "Error: Can not assign to '{variable_name}'").unwrap();
-                return Err(output.clone())
+                write!(output, "Error: Can not assign to '{variable_name}'\n").unwrap();
+                return Err(())
             }
             position += line_raw.len();
 
