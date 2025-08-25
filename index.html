@@ -271,7 +271,11 @@ map = λf.(rfold (λah.(pair (f h) a)) nil)
                         outputBox.style.backgroundColor = "#f9f9f9";
                         img.src = 'images/twi.png';
                     } catch (error) {
-                        outputBox.textContent = error;
+                        if (error == "RuntimeError: unreachable executed") {
+                            outputBox.textContent = "Uh oh, uhmm... this should not have happened. Something broke.\nCould you report me what input you used? Pwetty pwease 🥺👉👈"
+                        } else {
+                            outputBox.textContent = error;
+                        }
                         outputBox.style.backgroundColor = "#fff8f8";
                         img.src = 'images/ponka.png';
                     }

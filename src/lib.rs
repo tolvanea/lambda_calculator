@@ -6,7 +6,6 @@ use slotmap::Key;
 use std::collections::HashMap;
 use AstNode::{Definition, Application, Symbol};
 use std::fmt::Write as _;
-use std::panic;
 
 
 use wasm_bindgen::prelude::*;
@@ -16,22 +15,7 @@ type Res<T> = Result<T, ()>;
 
 #[wasm_bindgen]
 pub fn process_input(source_code: &str, debug_parsing: bool) -> Result<String, JsError> {
-    let result = panic::catch_unwind(|| {
-        Ast::read_string_and_compute(source_code, debug_parsing)
-    });
-
-    match result {
-        Ok(s) => s,
-        Err(err) => {
-            let err_pleading = "Uhmm... internal error. Could you report this? pwease 🥺👉👈\n";
-            let output = if let Some(panic_message) = err.downcast_ref::<&str>() {
-                format!("{}\n{}", err_pleading, panic_message)
-            } else {
-                err_pleading.to_string()
-            };
-            Err(output)
-        },
-    }.map_err(|e| JsError::new(&e))
+    Ast::read_string_and_compute(source_code, debug_parsing).map_err(|e| JsError::new(&e))
 }
 
 fn null() -> DefaultKey {
