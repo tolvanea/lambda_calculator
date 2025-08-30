@@ -51,6 +51,7 @@ impl Ast {
                 }
             }
             Err(_) => {
+                output.replace_range(..0, "\n"); // Javascript adds "Error: " to the string :(
                 Err(output)
             }
         }
