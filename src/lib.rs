@@ -201,6 +201,16 @@ impl Ast {
     }
 
     fn parse(&mut self, source_code: &str, print: bool, output: &mut String) -> Res<DefaultKey> {
+
+        if source_code.trim().is_empty() {
+            write!(
+                output,
+                "Empty program not allowed because I'm not adding \
+                special handling for that one single case."
+            ).unwrap();
+            return Err(())
+        }
+
         let mut symbols = Symbols::new();
         let re = Regex::new(r"([()])|(λ\s*[^()λ\.]+)\.|([^()λ\.\s\r\n]+)").unwrap();
         let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
