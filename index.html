@@ -259,7 +259,7 @@ map = λf.(rfold (λah.(pair (f h) a)) nil)
 
             </div>
             <div class="image-wrapper"> <!-- New wrapper for the image -->
-                <img id="pony" src="images/twi.png" alt="structure and interpretation of computer programs" id="doc-image">
+                <img id="pony" src="images/hello.png" alt="structure and interpretation of computer programs" id="doc-image">
             </div>
         </div>
 
@@ -281,7 +281,7 @@ map = λf.(rfold (λah.(pair (f h) a)) nil)
                         const output = process_input(input, checkbox.checked);
                         outputBox.textContent = output;
                         outputBox.style.backgroundColor = "#f9f9f9";
-                        img.src = 'images/twi.png';
+                        img.src = 'images/hello.png';
                     } catch (error) {
                         if (error == "RuntimeError: unreachable executed") {
                             outputBox.textContent = "Uh oh, uhmm... this should not have happened. Something broke.\nCould you report me what input you used? Pwetty pwease 🥺👉👈"
@@ -289,7 +289,7 @@ map = λf.(rfold (λah.(pair (f h) a)) nil)
                             outputBox.textContent = error;
                         }
                         outputBox.style.backgroundColor = "#fff8f8";
-                        img.src = 'images/ponka.png';
+                        img.src = 'images/ded.png';
                     }
                 };
             }
