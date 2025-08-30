@@ -205,8 +205,8 @@ impl Ast {
         if source_code.trim().is_empty() {
             write!(
                 output,
-                "Empty program not allowed because I'm not adding \
-                special handling for that one single case."
+                "Empty program rejected because it would be confusing \
+                 to have no output on button press."
             ).unwrap();
             return Err(())
         }
@@ -218,9 +218,9 @@ impl Ast {
         if let Some(tok) = tokens.next() {
             write!(
                 output,
-                "Error: Unexpected token '{tok}':\n\
-                There is more than one expression in the final statement.\n\
-                If you tried to make an evaluation, wrap it around parenthesis.\n"
+                "Error: Unexpected token '{tok}': Expected only one expression, found more.\n\
+                If you tried to make an evaluation, wrap parenthesis around it.\n
+                For example 'λfx.f x' is invalid syntax, make it 'λfx.(f x).' \n"
             ).unwrap();
             return Err(())
         }
@@ -419,6 +419,7 @@ impl Ast {
 
     fn read_source_code(&mut self, source_code: &str, print: bool, output: &mut String) -> Res<()> {
         let mut position = 0;
+        let mut parsing_in_statement = false;
 
         for line_raw in source_code.split_inclusive('\n') {
             // Remove comments
@@ -430,12 +431,16 @@ impl Ast {
                 position += line_raw.len();
                 continue
             }
+            if parsing_in_statement {
+                break // Drops comments and empty lines between "in" and the expression
+            }
             let (variable_name, the_rest) = match line.find("=") {
                 Some(n) => (line[..n].trim(), line[n+1..].trim()),
                 None => {
                     if line.trim() == "in" {
                         position += line_raw.len();
-                        break
+                        parsing_in_statement = true;
+                        continue
                     } else if self.bindings.is_empty() {
                         break
                     } else {
