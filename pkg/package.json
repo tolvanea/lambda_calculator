@@ -1,0 +1,15 @@
+{
+  "name": "lamlang",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "lamlang_bg.wasm",
+    "lamlang.js",
+    "lamlang.d.ts"
+  ],
+  "main": "lamlang.js",
+  "types": "lamlang.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

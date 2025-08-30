@@ -1,4 +1,5 @@
-# Lambda language
+# Lambda calculator
+Online lambda expression calculator tool.
 
 ## Build
 ```
