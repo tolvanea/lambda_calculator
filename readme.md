@@ -1,12 +1,14 @@
 # Lambda calculator
 Online lambda expression calculator tool.
+[See online demo here](https://tolvanea.github.io/lambda_calculator/)
 
 ## Build
+Install rust and wasm-pack, then
 ```
 wasm-pack build --target web
 ```
 
-## Open a server
+## Run locally
 ```
 python3 -m http.server
 ```
