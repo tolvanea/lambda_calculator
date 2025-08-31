@@ -4,7 +4,6 @@ use compact_str::CompactString;
 use std::iter::Peekable;
 use slotmap::Key;
 use std::collections::HashMap;
-use AstNode::{Definition, Application, Symbol};
 use std::fmt::Write as _;
 
 
@@ -22,15 +21,41 @@ fn null() -> DefaultKey {
     DefaultKey::null()
 }
 
+type Color = u8;
+
+// const COLORS: [&str; 8] = [
+//     "#000080",
+//     "#008000",
+//     "#800000",
+//     "#FF8C00",
+//     "#800080",
+//     "#008080",
+//     "#808000",
+//     "#404040",
+// ];
+const COLORS: [&str; 8] = [
+    "#60AC39",
+    "#B854D4",
+    "#B65611",
+    "#1FAD83",
+    "#D43552",
+    "#AE9513",
+    "#6684E1",
+    "#D73737",
+];
+
+
+
 #[derive(Clone)]
 enum AstNode {
     // Symbol, children symbols, child body
     Definition(CompactString, Vec<DefaultKey>, DefaultKey),
     // Left, right
-    Application(DefaultKey, DefaultKey),
+    Application(DefaultKey, DefaultKey, Color),
     // Symbol, defining node
     Symbol(CompactString, DefaultKey),
 }
+use AstNode::{Definition, Application, Symbol};
 
 struct Ast {
     hat: DefaultKey, // Invisible dummy node above the head
@@ -103,11 +128,12 @@ impl Ast {
                 let rest = self.print_flat(t, symbols);
                 format!("λ{symbol_with_astrophes}.{}", rest)
             }
-            Application(t1, t2) => {
+            Application(t1, t2, color) => {
                 let t1 = *t1; // Yes, borrow checker is this stupid
-                let t2 = *t2;
+                let t2 = *t2; // <span style=\"color: red\">Red</span>
+                let color = COLORS[*color as usize];
                 format!(
-                    "({} {})",
+                    "<span style=\"color: {color}\">(</span>{} {}<span style=\"color: {color}\">)</span>",
                     self.print_flat(t1, symbols),
                     self.print_flat(t2, symbols),
                 )
@@ -214,13 +240,14 @@ impl Ast {
         let mut symbols = Symbols::new();
         let re = Regex::new(r"([()])|(λ\s*[^()λ\.]+)\.|([^()λ\.\s\r\n]+)").unwrap();
         let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
-        let parsed = self.parse_rec(&mut tokens, &mut symbols, print as usize, output)?;
+        let parsed = self.parse_rec(&mut tokens, &mut symbols, 0, print, output)?;
         if let Some(tok) = tokens.next() {
             write!(
                 output,
-                "Error: Unexpected token '{tok}': Expected only one expression, found more.\n\
-                If you tried to make an evaluation, wrap parenthesis around it.\n
-                For example 'λfx.f x' is invalid syntax, make it 'λfx.(f x).' \n"
+                "Error: Unexpected token '{tok}': Expected only one (possibly nested) expression,\n\
+                found more. If you tried to make an evaluation, wrap parenthesis around it.\n\
+                For example 'λfx.f x' is invalid syntax, make it 'λfx.(f x).' \n\
+                Or, it may be that you have one extra closing parenthesis somewhere in your code."
             ).unwrap();
             return Err(())
         }
@@ -231,14 +258,14 @@ impl Ast {
         &mut self,
         tokens: &mut Peekable<impl Iterator<Item = &'a str>>,
         symbols: &mut Symbols,
-        indt: usize,
+        i: usize,
+        print: bool,
         output: &mut String,
     ) -> Res<DefaultKey> {
         let token = tokens.next()
             .ok_or_else(|| write!(output, "Closing parenthesis missing").unwrap())?;
         let next_char = token.chars().next().unwrap();
-
-        let indt1 = if indt == 0 { 0 } else { indt+1 };
+        let ind = " ".repeat(4 * i);
 
         if next_char == 'λ' {
             let params = token[2..].trim().chars().filter(|c| !c.is_whitespace());
@@ -246,13 +273,13 @@ impl Ast {
             let mut applications = Vec::new();
             for s in params {
                 let mut symbol = CompactString::new(""); symbol.push(s); // Rust sucks,
-                if indt > 0 { write!(output, "{}λ{symbol}\n", " ".repeat(4*indt)).unwrap(); }
+                if print {write!(output, "{}λ{symbol}\n", ind).unwrap();}
                 let alloc = self.t.insert(Definition(symbol.clone(), Vec::new(), null()));
                 symbols.entry(symbol.clone()).or_insert(Vec::new()).push((alloc, Vec::new()));
                 applications.push((symbol, alloc));
             }
 
-            let mut child = self.parse_rec(tokens, symbols, indt1, output)?;
+            let mut child = self.parse_rec(tokens, symbols, i+1, print, output)?;
 
             for (symbol, alloc) in applications.iter().rev() {
                 self.collect_symbols(*alloc, child, &symbol, symbols);
@@ -260,28 +287,30 @@ impl Ast {
             }
             Ok(child)
         } else if next_char == '(' {
-            if indt > 0 { write!(output, "{}(\n", " ".repeat(4*indt)).unwrap(); }
-            let mut left = self.parse_rec(tokens, symbols, indt1, output)?;
+            let color_id = i % COLORS.len();
+            let color = COLORS[color_id];
+            if print {write!(output, "{}<span style=\"color: {color}\">(</span>\n", ind).unwrap();}
+            let mut left = self.parse_rec(tokens, symbols, i+1, print, output)?;
             let mut arguments = Vec::new();
 
             while *tokens.peek().expect("Missing parenthesis ')'") != ")" {
-                arguments.push(self.parse_rec(tokens, symbols, indt1, output)?);
+                arguments.push(self.parse_rec(tokens, symbols, i+1, print, output)?);
             }
             let ast = if arguments.is_empty() {
                 left// Only one expression: no need to wrap it
             } else {
                 for argument in arguments {
-                    left = self.t.insert(Application(left, argument));
+                    left = self.t.insert(Application(left, argument, color_id as u8));
                 }
                 left
             };
 
-            if indt > 0 { write!(output, "{})\n", " ".repeat(4*indt)).unwrap(); }
+            if print {write!(output, "{}<span style=\"color: {color}\">)</span>\n", ind).unwrap();}
             assert_eq!(tokens.next(), Some(")"));
             Ok(ast)
         } else {
             let symbol: CompactString = token.into();
-            if indt > 0 { write!(output, "{}{symbol}\n", " ".repeat(4*indt)).unwrap(); }
+            if print {write!(output, "{}{symbol}\n", ind).unwrap(); }
             self.create_leaf(&symbol, symbols, None, output)
         }
     }
@@ -337,7 +366,7 @@ impl Ast {
                         }
                         match self.t.get_mut(grand_parent).unwrap() {
                             Definition(_, _, t) => {*t = n}
-                            Application(t1, t2) => {
+                            Application(t1, t2, _) => {
                                 if *t1 == parent {*t1 = n;} else {*t2 = n;}
                             }
                             _ => panic!(),
@@ -348,7 +377,7 @@ impl Ast {
                     }
                 }
             }
-            Application(t1, t2) => {
+            Application(t1, t2, _) => {
                 let parn = Some((t2, parent));
                 // Leftmost outermost reduction is guaranteed to yield beta-normal form, if exists
                 let left = self.beta_reduce(t1, node, parn, output)?;
@@ -374,11 +403,11 @@ impl Ast {
                 let child = self.deep_clone(t, symbols, output)?;
                 Ok(self.collect_symbols(alloc, child, &symbol, symbols))
             }
-            Application(t1, t2) => {
-                let (t1, t2) = (*t1, *t2);
+            Application(t1, t2, c) => {
+                let (t1, t2, c) = (*t1, *t2, *c);
                 let child1 = self.deep_clone(t1, symbols, output)?;
                 let child2 = self.deep_clone(t2, symbols, output)?;
-                Ok(self.t.insert(Application(child1, child2)))
+                Ok(self.t.insert(Application(child1, child2, c)))
             }
             Symbol(symbol, back_ref) => {
                 self.create_leaf(&symbol.clone(), symbols, Some(*back_ref), output)
@@ -391,7 +420,7 @@ impl Ast {
             Definition(_, _, t) => {
                 self.remove(*t);
             }
-            Application(t1, t2) => {
+            Application(t1, t2, _) => {
                 let (t1, t2) = (*t1, *t2);  // Rust being rust
                 self.remove(t1);
                 self.remove(t2);
