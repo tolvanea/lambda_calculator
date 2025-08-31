@@ -168,17 +168,13 @@ in
                 This is a lambda <b><i>function definition</i></b>
                 <pre><code>λab.a</code></pre><p>
 
-                It takes two parameters <code>a</code> and <code>b</code>, and returns the first parameter <code>a</code>.
+                It takes two parameters <code>a</code> and <code>b</code>, and returns the first parameter <code>a</code>. The <code>a</code> and <code>b</code> are also called <b><i>symbols</i></b>.
                 <p>
-                <b><i>Evaluation</i></b> of a lambda function is made by putting it inside the parenthesis with the arguments:
-                <pre><code>(λab.a argument1 argument2)</code></pre><p>
-                So instead of the common function call notation <code>f(a, b)</code>, it is <code>(f a b)</code>. Well anyways, in this case the function returns the first parameter, so it would evaluate to <code>argument1</code>.
+                <b><i>Function evaluation</i></b> is written with parenthesis wrapping both function and its arguments:
+                <pre><code >(λab.a argument1 argument2)</code></pre><p>
+                So instead of the common function call notation <code style="white-space: nowrap;">f(a, b)</code>, it is <code style="white-space: nowrap;">(f a b)</code>. In this case the function <code style="white-space: nowrap;">λab.a</code> returns the first parameter <code>a</code>, evaluating to <code>argument1</code>.
                 <p>
-                Here the <code>argument1</code> and <code>argument2</code> are some expressions. An expression is either of the above:
-                <ul>
-                    <li>function definition <code>λ...</code>, or</li>
-                    <li>function evaluation <code>(...)</code></li>
-                </ul>
+                Here the <code>argument1</code> and <code>argument2</code> are some <i>expressions</i>. An expression is either function definition, function evaluation, or symbol. It can be a deeply nested structure.
 
                 <p>
                 The program consists of the assignments, a keyword <code>in</code>, and one expression.
@@ -191,7 +187,10 @@ in
                 <pre><code>λc.c</code></pre>
 
                 <h2>Ok, and?</h2><p>
-                That's it! There is nothing more! No classes, no numbers, no booleans. Only pure lambda functions. The task here is to build everything from bottom up, starting from lambda functions. For example, a boolean calculation "<i>false and true</i>" can be encoded like so:
+                That's it! There is nothing more! No numbers, no if-statements, no loops. Only pure lambda functions. The task is to build the programming language primitives from pure lambda functions. These primitives can be then used to build more intuitive programs. This goes extreme on the paradigm of functional programming: <i>"Building your own programming language first"</i>
+
+                <p>
+                You have full liberty to decide what is true. For example, boolean calculation "<i>false and true</i>" can be encoded like so:
                 <pre><code>true = λab.a
 false = λab.b
 and = λxy.(x y false)
@@ -200,18 +199,18 @@ in
                 Try copy-pasting it to the left, it evaluates to
                 <pre><code>λa.λb.b</code></pre>
                 <h4>Wait, why <code>λa.λb.b</code> instead of <code>λab.b</code>?</h4><p>
-                Because that is just internal representation in lambda calculus, as lambda calculus does not have multiparameter functions. A two parameter function <code>λab</code> is just a syntax sugar to a single parameter function <code>λa</code> that returns a single parameter function <code>λb</code>. This behaves as a two parameter function.
+                Because that is just internal representation in lambda calculus, which does not have multiparameter functions. A two parameter function <code>λab</code> is just a syntax sugar to a single parameter function <code>λa</code> that returns a single parameter function <code>λb</code>. This behaves as a two parameter function.
 
                 <h2>But why?</h2><p>
                 All of computation can be formulated on top of functions! How cool is that!
-                I was inspired by this <a href="https://www.youtube.com/watch?v=RcVA8Nj6HEo">video</a>, see it, it's awesome.
+                See this <a href="https://www.youtube.com/watch?v=RcVA8Nj6HEo">video</a>, it's awesome.
 
 
                 <h2>Can I hide the pony below?</h2><p>
-                No, she's integral part of the tool.
+                No, she's integral part of the interpreter.
 
                 <h2>Standard library</h2><p>
-                Copy paste whatever fragments you need from here. Also see the <a href="https://en.wikipedia.org/wiki/Lambda_calculus#Encoding_datatypes">wikipedia page</a>.
+                Copy paste whatever fragments you need from here. Or all.
 
                 <pre><code>true = λab.a
 false = λab.b
@@ -247,8 +246,7 @@ Y = (u u)
 
 # Factorial
 if_0 = λn.((n λa.false) true)
-factorial = λfn.(if_0 n 1 (* n (f (-1 n))))
-! = (u u factorial)
+! = (Y λfn.(if_0 n 1 (* n (f (-1 n)))))
 
 # List processing
 rfold = λfa.(Y (λrl.(l λhtd.(f (r t) h) a)))
@@ -256,10 +254,15 @@ map = λf.(rfold (λah.(pair (f h) a)) nil)
 [1,2,3] = (pair 1 (pair 2 (pair 3 nil)))
 </code></pre>
 
+                See also <a href="https://en.wikipedia.org/wiki/Lambda_calculus#Encoding_datatypes">wikipedia page</a>
+
                 <h2>Examples</h2><p>
-                Using the definitions in the "standard library" above, following expression can be calculated.
+                Using the definitions in the "standard library", following expression can be calculated. Note, copy-paste only one expression after <code>in</code> statement at a time.
                 <pre><code># 1 + 1 = 2
 (+ 1 1)
+
+# 2 * 4 = 8
+(* 2 4)
 
 # 2^2^2 = 16
 (↑↑ 2 3)
@@ -269,7 +272,9 @@ map = λf.(rfold (λah.(pair (f h) a)) nil)
 
 # 1^2 + 2^2 + 3^2 = 14
 (rfold + 0 (map (^ 2) [1,2,3]))
+
 </code></pre>
+                You may notice that there is no real need for numbers larger than 4, as the computer is throttling anyways. Many operations, especially the -1, are extremely inefficient requiring ridiculous amount of β-reduction cycles. Any meaningful programs are thus infeasible.
 
             </div>
             <div class="image-wrapper"> <!-- New wrapper for the image -->
