@@ -109,7 +109,7 @@
 
             #compile {
                 margin-bottom: 20px; /* Add margin around the button */
-                width: 50%;
+                width: 20%;
                 height: 50px;
                 font-size: 25px;
                 border-radius: 6px;
@@ -149,7 +149,7 @@ in
 (and true false)</textarea>
             </div>
             <div id="how-the-fuck-i-center-a-div">
-                <button id="compile">go brrrrrrrrr</button>
+                <button id="compile">Run</button>
                 <label>
                     <input type="checkbox" id="debug_parse" style="margin-left: 30px" checked> Debug parsing
                 </label>
@@ -199,17 +199,16 @@ in
 (and true false)</code></pre>
                 Try copy-pasting it to the left, it evaluates to
                 <pre><code>λa.λb.b</code></pre>
-                <h4>Wait why <code>λa.λb.b</code> instead of <code>λab.b</code>?</h4><p>
-                Because that is internal representation of lambda calculus, as lambda calculus does not have multiparameter functions. A two parameter function <code>λab</code> is actually just a syntax sugar to a single parameter function <code>λa</code> that returns a single parameter function <code>λb</code>. You can feed two arguments in and it works as if it was a two parameter function.
+                <h4>Wait, why <code>λa.λb.b</code> instead of <code>λab.b</code>?</h4><p>
+                Because that is just internal representation in lambda calculus, as lambda calculus does not have multiparameter functions. A two parameter function <code>λab</code> is just a syntax sugar to a single parameter function <code>λa</code> that returns a single parameter function <code>λb</code>. This behaves as a two parameter function.
 
                 <h2>But why?</h2><p>
                 All of computation can be formulated on top of functions! How cool is that!
-                <p>
                 I was inspired by this <a href="https://www.youtube.com/watch?v=RcVA8Nj6HEo">video</a>, see it, it's awesome.
 
 
                 <h2>Can I hide the pony below?</h2><p>
-                No, it's integral part of the tool.
+                No, she's integral part of the tool.
 
                 <h2>Standard library</h2><p>
                 Copy paste whatever fragments you need from here. Also see the <a href="https://en.wikipedia.org/wiki/Lambda_calculus#Encoding_datatypes">wikipedia page</a>.
@@ -258,7 +257,7 @@ map = λf.(rfold (λah.(pair (f h) a)) nil)
 </code></pre>
 
                 <h2>Examples</h2><p>
-                As examples, using the definitions in the "standard library" above, following expression can be calculated.
+                Using the definitions in the "standard library" above, following expression can be calculated.
                 <pre><code># 1 + 1 = 2
 (+ 1 1)
 
