@@ -92,11 +92,33 @@ impl Ast {
         let mut counter = 1;
         let succ = loop  {
             let mut symbols = Symbols::new();
-            if !self.beta_reduce(self.head(), self.hat, None, output)? {
+            if !self.beta_reduce(self.head(), self.hat, None, output)? { // Normal form is found
+                // In case the result was not printed on last round, print it now
+                if (200 < counter && counter < 999 && (counter-1) % 5 != 0)
+                    || (1000 < counter && (counter-1) % 20 != 0)
+                {
+                    writeln!(
+                        output,
+                        "{counter:<5} {}",
+                        self.print_flat(self.head(), &mut symbols)
+                    ).unwrap();
+                }
                 break true
+
             }
-            writeln!(output, "{:<5} {}", counter, self.print_flat(self.head(), &mut symbols)).unwrap();
-            if counter >= 200000 || self.t.len() > 20000 {
+            if counter == 200 {
+                writeln!(output, "Printing every 5th line to reduce output").unwrap();
+            } else if counter == 1000 {
+                writeln!(output, "Printing every 20th line to reduce output").unwrap();
+            }
+            if counter < 200 || (counter < 1000 && counter % 5 == 0) || (counter % 20 == 0) {
+                writeln!(
+                    output,
+                    "{counter:<5} {}",
+                    self.print_flat(self.head(), &mut symbols)
+                ).unwrap();
+            }
+            if counter >= 10000 || self.t.len() > 7000 { // Requirements to calculate 6!
                 break false
             }
             counter += 1;
@@ -220,7 +242,9 @@ impl Ast {
                         None => {
                             writeln!(
                                 output,
-                                "Error: Unknown symbol '{symbol}'",
+                                "Error: Unknown symbol '{symbol}'.\n\
+                                Note: If you tried to make a call like 'λfx.f x', it's invalid. \
+                                Wrap it like so: 'λfx.(f x).",
                             ).unwrap();
                             return Err(())
                         }
