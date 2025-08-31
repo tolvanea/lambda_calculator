@@ -4,7 +4,7 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta property="og:title" content="Lambda Calculator" />
-        <meta property="og:description" content="Online lambda calculus evaluator tool, and also a Turing complete programming language." />
+        <meta property="og:description" content="Online lambda calculus evaluation tool, and also a Turing complete programming language." />
         <meta property="og:image" content="https://raw.githubusercontent.com/tolvanea/lambda_calculator/refs/heads/master/images/hello.png" />
         <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
         <title>Lambda calculator</title>
@@ -89,6 +89,7 @@
                 white-space: pre; /* Preserve whitespace */
                 border: 1px solid #ccc; /* Add a border */
                 padding: 20px; /* Add some padding */
+                font-size: 16px;
                 background-color: #f9f9f9; /* Light background color */
                 height: 100%;
                 overflow-y: auto; /* Enable vertical scrolling if needed */
@@ -100,6 +101,7 @@
                 width: 100%; /* Full width */
                 resize: none; /* Prevent resizing */
                 padding: 20px; /* Add padding */
+                font-size: 16px;
                 background-color: #f9f9f9; /* Light background color */
                 border: 1px solid #ccc; /* Add a border */
                 border-radius: 4px; /* Rounded corners */
@@ -140,7 +142,11 @@
         <div id="main-container">
             <h1 style="text-align: center;">Lambda calculator</h1>
             <div id="input-container">
-                <textarea id="input" placeholder="Type the code here" rows="5" style="flex: 1; width: 100%;"></textarea>
+                <textarea id="input" rows="5" style="flex: 1; width: 100%;">true = λab.a
+false = λab.b
+and = λxy.(x y false)
+in
+(and true false)</textarea>
             </div>
             <div id="how-the-fuck-i-center-a-div">
                 <button id="compile">go brrrrrrrrr</button>
@@ -185,7 +191,7 @@ in
                 <pre><code>λc.c</code></pre>
 
                 <h2>Ok, and?</h2><p>
-                That's it! There is nothing more! No classes, no numbers, no booleans. Only pure lambda functions. The task here is to build everything from bottom up, starting from lambda functions. For example, a boolean calculation "FALSE AND TRUE" can be encoded like so:
+                That's it! There is nothing more! No classes, no numbers, no booleans. Only pure lambda functions. The task here is to build everything from bottom up, starting from lambda functions. For example, a boolean calculation "<i>false and true</i>" can be encoded like so:
                 <pre><code>true = λab.a
 false = λab.b
 and = λxy.(x y false)
@@ -211,6 +217,7 @@ in
                 <pre><code>true = λab.a
 false = λab.b
 and = λxy.(x y false)
+or = λxy.(x true y)
 
 # Numbers encoded as recursive function calls
 0 = λfx.x
