@@ -279,12 +279,6 @@ impl Ast {
             if indt > 0 { write!(output, "{})\n", " ".repeat(4*indt)).unwrap(); }
             assert_eq!(tokens.next(), Some(")"));
             Ok(ast)
-        } else if next_char == '(' {
-            write!(
-                output,
-                "Syntax error: '(' right before:\n{}", tokens.collect::<String>()
-            ).unwrap();
-            Err(())
         } else {
             let symbol: CompactString = token.into();
             if indt > 0 { write!(output, "{}{symbol}\n", " ".repeat(4*indt)).unwrap(); }
