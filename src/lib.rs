@@ -66,7 +66,7 @@ impl Ast {
         let mut output = String::new();
         match ast.read_source_code(source_code, debug_parsing, &mut output) {
             Ok(_) => {
-                write!(output, "\n\n").unwrap();
+                writeln!(output, "\n").unwrap();
                 match ast.compute_to_string(&mut output) {
                     Ok(_) => Ok(output),
                     Err(_) => Err(output),
@@ -88,14 +88,14 @@ impl Ast {
 
     fn compute_to_string(&mut self, output: &mut String) -> Res<()> {
         let mut symbols = Symbols::new();
-        write!(output, "{:<5} {}\n", 0, self.print_flat(self.head(), &mut symbols)).unwrap();
+        writeln!(output, "{:<5} {}", 0, self.print_flat(self.head(), &mut symbols)).unwrap();
         let mut counter = 1;
         let succ = loop  {
             let mut symbols = Symbols::new();
             if !self.beta_reduce(self.head(), self.hat, None, output)? {
                 break true
             }
-            write!(output, "{:<5} {}\n", counter, self.print_flat(self.head(), &mut symbols)).unwrap();
+            writeln!(output, "{:<5} {}", counter, self.print_flat(self.head(), &mut symbols)).unwrap();
             if counter >= 200000 || self.t.len() > 20000 {
                 break false
             }
@@ -104,7 +104,7 @@ impl Ast {
         if succ {
             Ok(())
         } else {
-            write!(output, "The program does not seem to halt, terminating it\n").unwrap();
+            writeln!(output, "The program does not seem to halt, terminating it").unwrap();
             Err(())
         }
     }
@@ -117,7 +117,7 @@ impl Ast {
             Definition(s, _, t, body_color) => {
                 let t = *t;
                 let body_color = BODY_COLORS[*body_color];
-                let shadows = symbols.entry(s.clone()).or_insert(Vec::new());
+                let shadows = symbols.entry(s.clone()).or_default();
                 shadows.push((node, Vec::new()));
                 symbol2 = format!("{s}{}", "'".repeat(shadows.len() - 1)).into();
                 let symbol_with_astrophes = symbol2.clone();
@@ -161,12 +161,9 @@ impl Ast {
         };
         // If Definition match-arm was taken, return temporal symbol overwrite (x x') back to normal
         // This would be in the Definiton match-arm, but borrow checker wants it separate.
-        match self.t.get_mut(node).unwrap() {
-            Definition(s, _, _, _) => {
-                std::mem::swap(s, &mut symbol2);
-                symbols.get_mut(s).unwrap().pop();
-            }
-            _ => ()
+        if let Definition(s, _, _, _) = self.t.get_mut(node).unwrap() {
+            std::mem::swap(s, &mut symbol2);
+            symbols.get_mut(s).unwrap().pop();
         }
         out
     }
@@ -221,9 +218,9 @@ impl Ast {
                             return self.deep_clone(*ast, &mut HashMap::new(), output)
                         }
                         None => {
-                            write!(
+                            writeln!(
                                 output,
-                                "Error: Unknown symbol '{symbol}'\n",
+                                "Error: Unknown symbol '{symbol}'",
                             ).unwrap();
                             return Err(())
                         }
@@ -248,7 +245,7 @@ impl Ast {
     ) -> Res<DefaultKey> {
 
         if source_code.trim().is_empty() {
-            write!(
+            writeln!(
                 output,
                 "Empty program rejected because it would be confusing \
                  to have no output on button press."
@@ -258,10 +255,10 @@ impl Ast {
 
         let mut symbols = Symbols::new();
         let re = Regex::new(r"([()])|(λ\s*[^()λ\.]+)\.|([^()λ\.\s\r\n]+)").unwrap();
-        let mut tokens = re.captures_iter(&source_code).map(|c| c.extract::<1>().1[0]).peekable();
+        let mut tokens = re.captures_iter(source_code).map(|c| c.extract::<1>().1[0]).peekable();
         let parsed = self.parse_rec(&mut tokens, &mut symbols, 0, print, output, body_color)?;
         if let Some(tok) = tokens.next() {
-            write!(
+            writeln!(
                 output,
                 "Error: Unexpected token '{tok}': Expected only one (possibly nested) expression,\n\
                 found more. If you tried to make an evaluation, wrap parenthesis around it.\n\
@@ -283,7 +280,7 @@ impl Ast {
         body_color: usize,
     ) -> Res<DefaultKey> {
         let token = tokens.next()
-            .ok_or_else(|| write!(output, "Closing parenthesis missing").unwrap())?;
+            .ok_or_else(|| writeln!(output, "Closing parenthesis missing").unwrap())?;
         let next_char = token.chars().next().unwrap();
         let ind = " ".repeat(4 * (i+1));
 
@@ -294,45 +291,45 @@ impl Ast {
             for s in params {
                 let mut symbol = CompactString::new(""); symbol.push(s); // Rust sucks,
                 if print {
-                    write!(
+                    writeln!(
                         output,
                         "{ind}\
                         <span style=\"color: {}\">\
                             λ{symbol}\
-                        </span>\n",
+                        </span>",
                         BODY_COLORS[body_color]
                     ).unwrap();
                 }
                 let alloc = self.t.insert(
                     Definition(symbol.clone(), Vec::new(), null(), body_color)
                 );
-                symbols.entry(symbol.clone()).or_insert(Vec::new()).push((alloc, Vec::new()));
+                symbols.entry(symbol.clone()).or_default().push((alloc, Vec::new()));
                 applications.push((symbol, alloc));
             }
 
             let mut child = self.parse_rec(tokens, symbols, i+1, print, output, body_color)?;
 
             for (symbol, alloc) in applications.iter().rev() {
-                self.collect_symbols(*alloc, child, &symbol, symbols);
+                self.collect_symbols(*alloc, child, symbol, symbols);
                 child = *alloc;
             }
             Ok(child)
         } else if next_char == '(' {
             let parenthesis_color = PARENTHESIS_COLORS[i % PARENTHESIS_COLORS.len()];
             if print {
-                write!(
+                writeln!(
                     output,
                     "{ind}\
                     <span style=\"color: {parenthesis_color}\">\
                         (\
-                    </span>\n"
+                    </span>"
                 ).unwrap();
             }
             let mut left = self.parse_rec(tokens, symbols, i+1, print, output, body_color)?;
             let mut arguments = Vec::new();
 
             while *tokens.peek()
-                .ok_or_else(|| write!(output, "Closing parenthesis missing").unwrap())?
+                .ok_or_else(|| writeln!(output, "Closing parenthesis missing").unwrap())?
                 != ")"
             {
                 arguments.push(self.parse_rec(tokens, symbols, i+1, print, output, body_color)?);
@@ -349,12 +346,12 @@ impl Ast {
             };
 
             if print {
-                write!(
+                writeln!(
                     output,
                     "{ind}\
                     <span style=\"color: {parenthesis_color}\">\
                         )\
-                    </span>\n"
+                    </span>"
                 ).unwrap();
             }
             assert_eq!(tokens.next(), Some(")"));
@@ -372,12 +369,12 @@ impl Ast {
                     }
                     None => body_color
                 };
-                write!(
+                writeln!(
                     output,
                     "{ind}\
                     <span style=\"color: {}\">\
                         {symbol}\
-                    </span>\n",
+                    </span>",
                     BODY_COLORS[body_color]
                 ).unwrap();
             }
@@ -469,7 +466,7 @@ impl Ast {
             Definition(symbol, _, t, c) => {
                 let (symbol, t) = (symbol.clone(), *t); // Rust iz funy laguane
                 let alloc = self.t.insert(Definition(symbol.clone(), Vec::new(), null(), *c));
-                symbols.entry(symbol.clone()).or_insert(Vec::new()).push((alloc, Vec::new()));
+                symbols.entry(symbol.clone()).or_default().push((alloc, Vec::new()));
                 let child = self.deep_clone(t, symbols, output)?;
                 Ok(self.collect_symbols(alloc, child, &symbol, symbols))
             }
@@ -522,10 +519,10 @@ impl Ast {
         for line_raw in source_code.split_inclusive('\n') {
             // Remove comments
             let line = match line_raw.find("#") {
-                Some(n) => &line_raw[0..n].trim(),
+                Some(n) => line_raw[0..n].trim(),
                 None => line_raw.trim()
             };
-            if line == "" {
+            if line.is_empty() {
                 position += line_raw.len();
                 continue
             }
@@ -539,13 +536,13 @@ impl Ast {
                         position += line_raw.len();
                         parsing_in_statement = true;
                         if print {
-                            write!(output, "in\n").unwrap();
+                            writeln!(output, "in").unwrap();
                         }
                         continue
                     } else if self.bindings.is_empty() {
                         break
                     } else {
-                        write!(
+                        writeln!(
                             output,
                             "Syntax error on line:\n{line}\nNo assignment \"=\" found.\n\
                             If this is your last expression, separate it from the definitions\
@@ -556,20 +553,20 @@ impl Ast {
                 }
             };
             if variable_name.chars().any(|c| c.is_whitespace() || c == 'λ') {
-                write!(output, "Error: Can not assign to '{variable_name}'\n").unwrap();
+                writeln!(output, "Error: Can not assign to '{variable_name}'").unwrap();
                 return Err(())
             }
 
             if print {
                 let body_color = BODY_COLORS[color_counter];
-                write!(
+                writeln!(
                     output,
                     "<span style=\"color: {body_color}\">\
                         {variable_name} =\
-                    </span>\n"
+                    </span>"
                 ).unwrap();
             }
-            let body = self.parse(&the_rest, print, output, color_counter)?;
+            let body = self.parse(the_rest, print, output, color_counter)?;
             self.bindings.insert(variable_name.into(), body);
 
             position += line_raw.len();
