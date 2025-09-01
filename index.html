@@ -162,7 +162,7 @@ in
             <div id="doc-container">
                 <h1>What is this?</h1><p>
 
-                Untyped <a href="https://www.youtube.com/watch?v=RcVA8Nj6HEo">lambda calculus</a> evaluation tool, and thus Turing complete programming language. Because all of computation can be built on top of pure lambda functions, (no "values" required,) this is a kind of sandbox where you first need to define what is a number or what is a boolean before you can do anything useful. This is like <a href="https://nandgame.com/">nand-game</a> but with functions only.
+                Untyped <a href="https://www.youtube.com/watch?v=RcVA8Nj6HEo">lambda calculus</a> evaluation tool, and thus Turing complete programming language. All of computation can be built on top of pure lambda functions, and this is a kind of sandbox where you first define what is a number before you can do anything useful. Like <a href="https://nandgame.com/">nand-game</a> but with functions.
 
                 <h2>Umm, what?</h2><p>
                 This is a lambda <b><i>function definition</i></b>
@@ -172,7 +172,7 @@ in
                 <p>
                 <b><i>Function evaluation</i></b> is written with parenthesis wrapping both function and its arguments:
                 <pre><code >(λab.a argument1 argument2)</code></pre><p>
-                So instead of the common function call notation <code style="white-space: nowrap;">f(a, b)</code>, it is <code style="white-space: nowrap;">(f a b)</code>. In this case the function <code style="white-space: nowrap;">λab.a</code> returns the first parameter <code>a</code>, evaluating to <code>argument1</code>.
+                So instead of the common function call notation <code style="white-space: nowrap;">f(a, b)</code>, it is <code style="white-space: nowrap;">(f a b)</code>. In the example above the function <code style="white-space: nowrap;">λab.a</code> returns the first parameter <code>a</code>, evaluating to <code>argument1</code>.
                 <p>
                 Here the <code>argument1</code> and <code>argument2</code> are some <i>expressions</i>. An expression is either function definition, function evaluation, or symbol. It can be a deeply nested structure.
 
@@ -275,7 +275,7 @@ map = λf.(rfold (λah.(pair (f h) a)) nil)
 (rfold + 0 (map (^ 2) [1,2,3]))
 
 </code></pre>
-                You may notice that there is no real need for numbers larger than 4, as the computer is throttling anyways. Many operations, especially the -1, are extremely inefficient requiring ridiculous amount of β-reduction cycles. Any meaningful programs are thus infeasible.
+                You may notice that there is no real need for numbers larger than 4, as your computer is throttling anyways. Many operations, especially the -1, are extremely inefficient requiring ridiculous amount of β-reduction cycles. Any meaningful programs are thus infeasible with this tool.
 
             </div>
             <div class="image-wrapper"> <!-- New wrapper for the image -->
