@@ -1,6 +1,6 @@
 # GlimGlamLang
 Online lambda expression calculator tool.
-[See online demo here](https://tolvanea.github.io/lambda_calculator/)
+[See online demo here](https://tolvanea.github.io/glim_glam_lang/)
 
 ## Build
 Install rust and wasm-pack, then
